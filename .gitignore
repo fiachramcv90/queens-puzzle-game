@@ -1,0 +1,5 @@
+# Claude Code agent worktrees (transient)
+.claude/worktrees/
+
+# Local, per-user Claude Code settings
+.claude/settings.local.json
