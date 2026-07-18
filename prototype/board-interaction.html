@@ -1,0 +1,149 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — board interaction study for ticket #4.
+  Not production code. Open this file directly in a browser to play.
+  Purpose: react to the tap-cycle model, auto-mark behavior, and conflict
+  highlighting. Decisions reached are recorded on GitHub issue #4; the real
+  implementation lives elsewhere. Regions are flood-filled from N seeds,
+  mirroring the generation approach researched in #3.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Queens board interaction — prototype</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<style>
+  :root{--text-primary:#1a1a1a;--text-secondary:#555;--text-muted:#999;--text-success:#0F6E56;--text-danger:#A32D2D;--border:#ddd}
+  body{font-family:system-ui,sans-serif;color:var(--text-primary);max-width:720px;margin:2rem auto;padding:0 1rem}
+  select,button{font:inherit;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fff}
+  h1{font-size:20px;font-weight:500}
+</style>
+</head>
+<body>
+<h1>Queens board interaction — prototype <span style="font-size:12px;color:var(--text-muted)">(throwaway, ticket #4)</span></h1>
+<div style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:0.5rem 0 1rem;font-size:13px;color:var(--text-secondary)">
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-weight:500;color:var(--text-primary)">Tap cycle</label>
+    <select id="cycle" style="width:220px">
+      <option value="c3">empty &rarr; X &rarr; queen &rarr; empty</option>
+      <option value="q2">empty &rarr; queen &rarr; empty (X = drag/right-click)</option>
+    </select>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-weight:500;color:var(--text-primary)">Auto-mark X on constrained</label>
+    <select id="autox" style="width:150px"><option value="off">off</option><option value="on">on</option></select>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-weight:500;color:var(--text-primary)">Conflict highlight</label>
+    <select id="conf" style="width:150px"><option value="subtle">subtle ring</option><option value="bold">bold red</option><option value="off">off</option></select>
+  </div>
+  <button id="reset" style="align-self:flex-end">Reset board</button>
+</div>
+<div id="board" style="display:inline-grid;gap:0;border:2px solid var(--text-primary);border-radius:6px;overflow:hidden;touch-action:none;user-select:none"></div>
+<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  <span id="status" style="font-size:14px;font-weight:500"></span>
+  <span id="hint" style="font-size:12px;color:var(--text-muted)">Drag across empty cells to sweep X's. Right-click places an X.</span>
+</div>
+<script>
+(function(){
+  const N=8;
+  const palette=['#EEEDFE','#E1F5EE','#FAECE7','#FBEAF0','#E6F1FB','#EAF3DE','#FAEEDA','#F1EFE8'];
+  const ink=['#26215C','#04342C','#4A1B0C','#4B1528','#042C53','#173404','#412402','#2C2C2A'];
+  function rng(s){return function(){s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff}}
+  let R;
+  function genRegions(){
+    const r=rng(42);
+    R=Array.from({length:N},()=>Array(N).fill(-1));
+    const seeds=[];const used=new Set();
+    for(let i=0;i<N;i++){let x,y;do{x=(r()*N)|0;y=(r()*N)|0}while(used.has(y*N+x));used.add(y*N+x);R[y][x]=i;seeds.push([y,x])}
+    let frontier=seeds.map((s,i)=>({y:s[0],x:s[1],id:i}));
+    while(frontier.length){
+      const k=(r()*frontier.length)|0;const c=frontier[k];
+      const dirs=[[1,0],[-1,0],[0,1],[0,-1]].sort(()=>r()-0.5);
+      let grew=false;
+      for(const[dy,dx]of dirs){const ny=c.y+dy,nx=c.x+dx;
+        if(ny>=0&&ny<N&&nx>=0&&nx<N&&R[ny][nx]===-1){R[ny][nx]=c.id;frontier.push({y:ny,x:nx,id:c.id});grew=true;break}}
+      if(!grew)frontier.splice(k,1);
+    }
+  }
+  genRegions();
+  let S=Array.from({length:N},()=>Array(N).fill(0));
+  const boardEl=document.getElementById('board');
+  boardEl.style.gridTemplateColumns=`repeat(${N},40px)`;
+  const cells=[];
+  function opt(id){return document.getElementById(id).value}
+  function neighbors(y,x){const o=[];for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dy&&!dx)continue;const ny=y+dy,nx=x+dx;if(ny>=0&&ny<N&&nx>=0&&nx<N)o.push([ny,nx])}return o}
+  function queens(){const q=[];for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(S[y][x]===2)q.push([y,x]);return q}
+  function conflicts(){
+    const q=queens();const bad=new Set();
+    for(let i=0;i<q.length;i++)for(let j=i+1;j<q.length;j++){
+      const[a,b]=q[i],[c,d]=q[j];
+      const adj=Math.abs(a-c)<=1&&Math.abs(b-d)<=1;
+      if(a===c||b===d||R[a][b]===R[c][d]||adj){bad.add(i);bad.add(j)}
+    }
+    return new Set([...bad].map(i=>q[i][0]*N+q[i][1]));
+  }
+  function autoMark(){
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(S[y][x]===3)S[y][x]=0;
+    if(opt('autox')!=='on')return;
+    for(const[qy,qx]of queens()){
+      for(let x=0;x<N;x++)if(S[qy][x]===0)S[qy][x]=3;
+      for(let y=0;y<N;y++)if(S[y][qx]===0)S[y][qx]=3;
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(R[y][x]===R[qy][qx]&&S[y][x]===0)S[y][x]=3;
+      for(const[ny,nx]of neighbors(qy,qx))if(S[ny][nx]===0)S[ny][nx]=3;
+    }
+  }
+  function render(){
+    autoMark();
+    const bad=opt('conf')==='off'?new Set():conflicts();
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      const el=cells[y*N+x];const rid=R[y][x];const s=S[y][x];
+      el.style.background=palette[rid];el.style.boxShadow='';el.style.color=ink[rid];
+      let inner='';
+      if(s===2)inner='<i class="ti ti-chess-queen" style="font-size:24px"></i>';
+      else if(s===1)inner='<i class="ti ti-x" style="font-size:16px;opacity:0.85"></i>';
+      else if(s===3)inner='<i class="ti ti-x" style="font-size:12px;opacity:0.35"></i>';
+      el.innerHTML=inner;
+      if(s===2&&bad.has(y*N+x)){
+        if(opt('conf')==='bold'){el.style.background='#F09595';el.style.color='#501313'}
+        else{el.style.boxShadow='inset 0 0 0 3px #E24B4A'}
+      }
+    }
+    const q=queens();const c=conflicts();const st=document.getElementById('status');
+    if(q.length===N&&c.size===0){
+      const regs=new Set(q.map(([y,x])=>R[y][x]));
+      if(regs.size===N){st.textContent='✓ Solved.';st.style.color='var(--text-success)';return}
+    }
+    st.textContent=`${q.length}/${N} queens placed · ${c.size} in conflict`;
+    st.style.color=c.size?'var(--text-danger)':'var(--text-secondary)';
+  }
+  function cycle(y,x){
+    const m=opt('cycle');const s=S[y][x];
+    if(s===3){ S[y][x]=(m==='c3')?1:2; return; }
+    if(m==='c3')S[y][x]=(s===0?1:s===1?2:0);
+    else S[y][x]=(s===2?0:2);
+    render();
+  }
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    const el=document.createElement('div');
+    el.style.cssText=`width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-right:${x<N-1&&R[y][x]!==R[y][x+1]?'2px solid var(--text-primary)':'0.5px solid rgba(0,0,0,0.12)'};border-bottom:${y<N-1&&R[y][x]!==R[y+1][x]?'2px solid var(--text-primary)':'0.5px solid rgba(0,0,0,0.12)'}`;
+    el.oncontextmenu=(e)=>{e.preventDefault();S[y][x]=(S[y][x]===1?0:1);render()};
+    cells.push(el);boardEl.appendChild(el);
+  }
+  let dragging=false,dragMode=null;
+  boardEl.addEventListener('pointerdown',e=>{const idx=cells.indexOf(e.target.closest('div'));if(idx<0)return;dragging=true;e.target.setPointerCapture&&e.target.setPointerCapture(e.pointerId)});
+  boardEl.addEventListener('pointermove',e=>{
+    if(!dragging)return;const t=document.elementFromPoint(e.clientX,e.clientY);const idx=cells.indexOf(t);
+    if(idx<0)return;const y=(idx/N)|0,x=idx%N;
+    if(dragMode===null)dragMode=(S[y][x]===0||S[y][x]===3)?1:0;
+    if(dragMode===1&&(S[y][x]===0||S[y][x]===3)){S[y][x]=1;render()}
+  });
+  boardEl.addEventListener('pointerup',e=>{const idx=cells.indexOf(e.target.closest('div'));if(dragging&&dragMode===null&&idx>=0){cycle((idx/N)|0,idx%N)}dragging=false;dragMode=null});
+  ['cycle','autox','conf'].forEach(id=>document.getElementById(id).onchange=render);
+  document.getElementById('reset').onclick=()=>{S=Array.from({length:N},()=>Array(N).fill(0));render()};
+  render();
+})();
+</script>
+</body>
+</html>
