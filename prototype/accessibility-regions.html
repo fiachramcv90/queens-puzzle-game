@@ -1,0 +1,321 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — colorblind-safe region study for ticket #12.
+  Not production code. Open directly in a browser (or view the published Artifact).
+  Purpose: react to ways of distinguishing regions WITHOUT relying on hue alone.
+  Flip treatments with the bottom bar; apply a colour-vision-deficiency filter
+  from the top controls to see how each treatment holds up. Decisions reached
+  are recorded on GitHub issue #12. Region flood-fill mirrors #3/#4.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Queens regions — accessibility prototype</title>
+<style>
+  :root{
+    --bg:#f4f3ef; --panel:#ffffff; --ink:#1c1b19; --muted:#6b6862;
+    --line:#e2ded6; --accent:#3b5bdb; --accent-soft:#eaeeff;
+    --good:#0f6e56; --warn:#9a6b00; --bad:#a3282d;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family:"Iowan Old Style",Georgia,"Times New Roman",serif;
+    color:var(--ink);background:var(--bg);margin:0;padding:0 0 96px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:28px 20px 0}
+  header h1{font-size:23px;font-weight:600;margin:0 0 3px;letter-spacing:-0.01em}
+  header p{margin:0 0 18px;color:var(--muted);font-size:14px;max-width:60ch;line-height:1.5}
+  .ui{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .controls{
+    display:flex;flex-wrap:wrap;gap:14px 20px;align-items:flex-end;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;margin-bottom:20px;
+  }
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)}
+  select,button{font:inherit;font-family:ui-sans-serif,system-ui,sans-serif;font-size:13px;
+    padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer}
+  select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .check{flex-direction:row;align-items:center;gap:8px}
+  .check input{width:16px;height:16px;accent-color:var(--accent)}
+  .check label{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink)}
+  .boardwrap{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+  #boardFrame{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  #board{display:grid;gap:0;border:3px solid #1c1b19;border-radius:4px;overflow:hidden;background:#1c1b19}
+  .cell{position:relative;display:flex;align-items:center;justify-content:center;background-clip:padding-box}
+  .glyph{font-size:22px;line-height:1;z-index:3;position:relative}
+  .badge{position:absolute;z-index:4;font-family:ui-sans-serif,system-ui,sans-serif;
+    font-weight:800;font-size:13px;letter-spacing:0.02em;
+    padding:1px 5px;border-radius:5px;background:rgba(255,255,255,.82);color:#111;
+    box-shadow:0 0 0 1.5px rgba(0,0,0,.35);}
+  .note{flex:1;min-width:230px}
+  .note h2{font-family:ui-sans-serif,system-ui,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:2px 0 10px}
+  .note .name{font-size:19px;font-weight:600;margin:0 0 6px}
+  .note p{font-size:14px;line-height:1.55;margin:0 0 12px;color:#33312d}
+  .verdict{font-family:ui-sans-serif,system-ui,sans-serif;font-size:12.5px;line-height:1.5;
+    border-left:3px solid var(--line);padding:2px 0 2px 12px}
+  .verdict b{font-weight:700}
+  .tag{display:inline-block;font-family:ui-sans-serif,system-ui,sans-serif;font-size:11px;font-weight:700;
+    padding:2px 7px;border-radius:99px;margin-right:6px}
+  .tag.good{background:#e2f2ec;color:var(--good)} .tag.warn{background:#f6edd6;color:var(--warn)} .tag.bad{background:#f7e2e2;color:var(--bad)}
+  /* bottom switcher */
+  .switcher{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:50;
+    display:flex;align-items:center;gap:4px;background:#1c1b19;color:#fff;
+    border-radius:99px;padding:6px 8px;box-shadow:0 8px 30px rgba(0,0,0,.28);
+    font-family:ui-sans-serif,system-ui,sans-serif}
+  .switcher button{background:transparent;border:0;color:#fff;font-size:18px;width:34px;height:34px;
+    border-radius:99px;display:flex;align-items:center;justify-content:center;padding:0}
+  .switcher button:hover{background:rgba(255,255,255,.14)}
+  .switcher .lbl{min-width:210px;text-align:center;font-size:13.5px;padding:0 6px}
+  .switcher .lbl .k{opacity:.55;margin-right:6px;font-weight:700}
+  .kbd{font-family:ui-monospace,monospace;font-size:11px;background:#efece5;border:1px solid var(--line);border-radius:4px;padding:0 4px}
+</style>
+</head>
+<body>
+<!-- SVG colour-vision-deficiency simulation filters (Brettel/Machado-style matrices) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="cvd-deuter" color-interpolation-filters="linearRGB">
+    <feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.70 0.30 0 0 0  0 0.30 0.70 0 0  0 0 0 1 0"/>
+  </filter>
+  <filter id="cvd-prot" color-interpolation-filters="linearRGB">
+    <feColorMatrix type="matrix" values="0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0"/>
+  </filter>
+  <filter id="cvd-trit" color-interpolation-filters="linearRGB">
+    <feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0"/>
+  </filter>
+</svg>
+
+<div class="wrap">
+  <header>
+    <h1>Distinguishing regions without hue</h1>
+    <p>Each colored area holds exactly one queen. Colour alone excludes players with
+       colour-vision deficiency — and up to 11 regions can't stay distinct in greyscale.
+       Flip the <b>treatment</b> at the bottom; apply a <b>vision filter</b> to stress-test it.</p>
+  </header>
+
+  <div class="controls ui">
+    <div class="field">
+      <label for="size">Board size</label>
+      <select id="size">
+        <option value="7">7 × 7</option>
+        <option value="9" selected>9 × 9</option>
+        <option value="11">11 × 11</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="vision">Vision filter</label>
+      <select id="vision">
+        <option value="none">Typical colour vision</option>
+        <option value="cvd-deuter">Deuteranopia (red-green, common)</option>
+        <option value="cvd-prot">Protanopia (red-green)</option>
+        <option value="cvd-trit">Tritanopia (blue-yellow)</option>
+        <option value="gray">Greyscale (monochromacy)</option>
+      </select>
+    </div>
+    <div class="field check">
+      <input type="checkbox" id="marks">
+      <label for="marks">Show sample queens</label>
+    </div>
+    <div class="field">
+      <label for="reseed">Regions</label>
+      <button id="reseed">Shuffle layout</button>
+    </div>
+  </div>
+
+  <div class="boardwrap">
+    <div id="boardFrame"><div id="board"></div></div>
+    <div class="note ui">
+      <h2>Current treatment</h2>
+      <p class="name" id="tName"></p>
+      <p id="tDesc"></p>
+      <div class="verdict" id="tVerdict"></div>
+    </div>
+  </div>
+</div>
+
+<div class="switcher ui">
+  <button id="prev" aria-label="Previous treatment">‹</button>
+  <div class="lbl"><span class="k" id="tKey"></span><span id="tLbl"></span></div>
+  <button id="next" aria-label="Next treatment">›</button>
+</div>
+
+<script>
+(function(){
+  // ---- region generation (seeded flood-fill, mirrors #4) ----
+  let N = 9, seed = 42;
+  let R = [];
+  function rng(s){return function(){s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff}}
+  function genRegions(){
+    const r = rng(seed);
+    R = Array.from({length:N},()=>Array(N).fill(-1));
+    const seeds=[], used=new Set();
+    for(let i=0;i<N;i++){let x,y;do{x=(r()*N)|0;y=(r()*N)|0}while(used.has(y*N+x));used.add(y*N+x);R[y][x]=i;seeds.push([y,x]);}
+    let frontier=seeds.map((s,i)=>({y:s[0],x:s[1],id:i}));
+    while(frontier.length){
+      const k=(r()*frontier.length)|0, c=frontier[k];
+      const dirs=[[1,0],[-1,0],[0,1],[0,-1]].sort(()=>r()-0.5);
+      let grew=false;
+      for(const[dy,dx]of dirs){const ny=c.y+dy,nx=c.x+dx;
+        if(ny>=0&&ny<N&&nx>=0&&nx<N&&R[ny][nx]===-1){R[ny][nx]=c.id;frontier.push({y:ny,x:nx,id:c.id});grew=true;break;}}
+      if(!grew)frontier.splice(k,1);
+    }
+  }
+
+  // ---- palettes ----
+  const PASTEL=['#DEDBFB','#CDEFE2','#F6DBCF','#F8D6E3','#CFE2F7','#DAEBC2','#F6DFB8','#E6E1D2','#D9CFF0','#C4EBEB','#EEDBB9'];
+  // CVD-aware qualitative set (Okabe–Ito extended with Tol tones), varied in lightness
+  const CVD=['#E69F00','#56B4E9','#009E73','#F0E442','#0072B2','#D55E00','#CC79A7','#999933','#88CCEE','#44AA99','#661100'];
+  const SYMBOLS=['A','B','C','D','E','F','G','H','J','K','L'];
+
+  function lum(hex){const n=parseInt(hex.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+    return 0.2126*r+0.7152*g+0.0722*b;}
+  function ink(hex){return lum(hex)>150?'#1a1a1a':'#ffffff';}
+
+  // pattern overlay (semi-transparent dark texture that survives greyscale)
+  function pattern(i){
+    const c='rgba(20,18,16,.34)', c2='rgba(20,18,16,.20)', t='transparent';
+    switch(i%11){
+      case 0: return 'none';
+      case 1: return `repeating-linear-gradient(45deg,${c} 0 2px,${t} 2px 8px)`;
+      case 2: return `repeating-linear-gradient(-45deg,${c} 0 2px,${t} 2px 8px)`;
+      case 3: return `repeating-linear-gradient(90deg,${c} 0 2px,${t} 2px 9px)`;
+      case 4: return `repeating-linear-gradient(0deg,${c} 0 2px,${t} 2px 9px)`;
+      case 5: return `radial-gradient(${c} 1.6px,${t} 1.9px) 0 0/9px 9px`;
+      case 6: return `repeating-linear-gradient(0deg,${c2} 0 1.5px,${t} 1.5px 9px),repeating-linear-gradient(90deg,${c2} 0 1.5px,${t} 1.5px 9px)`;
+      case 7: return `repeating-linear-gradient(45deg,${c2} 0 1.5px,${t} 1.5px 8px),repeating-linear-gradient(-45deg,${c2} 0 1.5px,${t} 1.5px 8px)`;
+      case 8: return `radial-gradient(${c} 2.4px,${t} 2.7px) 0 0/12px 12px,radial-gradient(${c} 2.4px,${t} 2.7px) 6px 6px/12px 12px`;
+      case 9: return `repeating-linear-gradient(30deg,${c} 0 2px,${t} 2px 7px)`;
+      case 10:return `repeating-linear-gradient(60deg,${c} 0 2px,${t} 2px 7px)`;
+    }
+  }
+
+  // sample queen placement: exactly one per region, best-effort non-adjacent
+  function sampleQueens(){
+    const pos={}; // regionId -> [y,x]
+    const rr=rng(seed*7+1);
+    const cells=[];
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)cells.push([y,x]);
+    cells.sort(()=>rr()-0.5);
+    const usedRow=new Set(),usedCol=new Set();
+    for(const[y,x]of cells){
+      const rid=R[y][x];
+      if(pos[rid]!==undefined)continue;
+      if(usedRow.has(y)||usedCol.has(x))continue;
+      pos[rid]=[y,x];usedRow.add(y);usedCol.add(x);
+    }
+    // fill any region still missing a queen (relax constraints)
+    for(const[y,x]of cells){const rid=R[y][x];if(pos[rid]===undefined)pos[rid]=[y,x];}
+    const set=new Set();for(const k in pos)set.add(pos[k][0]*N+pos[k][1]);
+    return set;
+  }
+
+  // ---- treatments ----
+  const treatments=[
+    {key:'A',label:'Cage borders',name:'Cage borders + pastel fill',
+     desc:'Regions keep their soft colour, but every region boundary is drawn as a heavy black outline — the way Killer Sudoku fences its cages. Colour becomes a helper, not the carrier.',
+     verdict:'<span class="tag good">holds</span> Boundaries are pure luminance, so they survive every filter. The one risk: reading which cells belong together across a big region still leans on the fill.'},
+    {key:'B',label:'Textures',name:'Texture / hatch fills',
+     desc:'Each region layers a distinct texture — stripes at several angles, dots, grids, cross-hatch — over its colour. Difference is carried by pattern, legible even in full greyscale.',
+     verdict:'<span class="tag warn">busy</span> Robust under any vision, but 9–11 textures get noisy, can clash with queen/X marks, and shrink hard on an 11×11 phone board.'},
+    {key:'C',label:'Region labels',name:'Per-region key labels',
+     desc:'Each region shows a single bold letter badge (A, B, C…) at its centre, like a map legend. You match cells to regions by the label, not the colour.',
+     verdict:'<span class="tag good">holds</span> Fully filter-proof and unambiguous. Adds visual furniture and an extra thing to scan; best as an opt-in assist rather than always-on.'},
+    {key:'D',label:'CVD-safe palette',name:'CVD-aware palette (hue only)',
+     desc:'Swap the pastels for a qualitative palette chosen to stay distinct under red-green deficiency (Okabe–Ito family), spread across lightness.',
+     verdict:'<span class="tag bad">breaks at 11</span> Better than pastels under CVD, but still hue-dependent: switch to Greyscale and neighbouring regions collapse. No palette alone separates 11 areas for monochromacy.'},
+    {key:'E',label:'Palette + borders',name:'CVD palette + cage borders',
+     desc:'The recommended combination: the CVD-aware palette does the fast at-a-glance work, and heavy cage borders guarantee separation when colour fails — with per-region labels available as an optional assist.',
+     verdict:'<span class="tag good">recommended</span> Redundant coding: colour for speed, borders for guarantee. Degrades gracefully to a pure line-drawing under greyscale. Labels can toggle on for anyone who needs them.'}
+  ];
+  let ti=0;
+
+  // ---- render ----
+  const board=document.getElementById('board');
+  function centroids(){
+    const sum={},cnt={};
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){const rid=R[y][x];
+      sum[rid]=sum[rid]||[0,0];sum[rid][0]+=y;sum[rid][1]+=x;cnt[rid]=(cnt[rid]||0)+1;}
+    const best={};
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){const rid=R[y][x];
+      const cy=sum[rid][0]/cnt[rid],cx=sum[rid][1]/cnt[rid];
+      const d=(y-cy)**2+(x-cx)**2;
+      if(!best[rid]||d<best[rid].d)best[rid]={d,cell:y*N+x};}
+    const m=new Set();for(const k in best)m.add(best[k].cell);return m;
+  }
+
+  function render(){
+    const t=treatments[ti];
+    const px = N<=7?46 : N<=9?40 : 34;
+    board.style.gridTemplateColumns=`repeat(${N},${px}px)`;
+    board.style.gridTemplateRows=`repeat(${N},${px}px)`;
+    const useCVD = (t.key==='D'||t.key==='E');
+    const pal = useCVD?CVD:PASTEL;
+    const borders = (t.key==='A'||t.key==='E');
+    const showLabels = (t.key==='C');
+    const showMarks = document.getElementById('marks').checked;
+    const marks = showMarks?sampleQueens():new Set();
+    const cent = showLabels?centroids():new Set();
+
+    board.innerHTML='';
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      const rid=R[y][x];
+      const el=document.createElement('div');
+      el.className='cell';
+      const base=pal[rid];
+      el.style.color=ink(base);
+      if(t.key==='B'){
+        el.style.background=`${pattern(rid)}, ${base}`;
+      } else {
+        el.style.background=base;
+      }
+      // internal region borders (thin grid otherwise)
+      const edge=(ny,nx)=> ny<0||nx<0||ny>=N||nx>=N || R[ny][nx]!==rid;
+      const thick='2px solid #1c1b19', thin='1px solid rgba(0,0,0,.10)';
+      el.style.borderTop    = borders&&edge(y-1,x)?thick:thin;
+      el.style.borderBottom = borders&&edge(y+1,x)?thick:thin;
+      el.style.borderLeft   = borders&&edge(y,x-1)?thick:thin;
+      el.style.borderRight  = borders&&edge(y,x+1)?thick:thin;
+
+      if(showLabels && cent.has(y*N+x)){
+        const b=document.createElement('span');b.className='badge';b.textContent=SYMBOLS[rid];
+        el.appendChild(b);
+      }
+      if(marks.has(y*N+x)){
+        const g=document.createElement('span');g.className='glyph';g.textContent='♛';
+        g.style.fontSize=(px*0.72)+'px';el.appendChild(g);
+      }
+      board.appendChild(el);
+    }
+    // apply vision filter to the board frame
+    const v=document.getElementById('vision').value;
+    board.style.filter = v==='none'?'none' : v==='gray'?'grayscale(1)' : `url(#${v})`;
+
+    // note panel
+    document.getElementById('tName').textContent=t.name;
+    document.getElementById('tDesc').textContent=t.desc;
+    document.getElementById('tVerdict').innerHTML=t.verdict;
+    document.getElementById('tKey').textContent=t.key;
+    document.getElementById('tLbl').textContent=t.label;
+  }
+
+  // ---- wiring ----
+  function go(d){ti=(ti+d+treatments.length)%treatments.length;render();}
+  document.getElementById('prev').onclick=()=>go(-1);
+  document.getElementById('next').onclick=()=>go(1);
+  document.getElementById('vision').onchange=render;
+  document.getElementById('marks').onchange=render;
+  document.getElementById('size').onchange=e=>{N=+e.target.value;genRegions();render();};
+  document.getElementById('reseed').onclick=()=>{seed=(Math.random()*1e6)|0;genRegions();render();};
+  window.addEventListener('keydown',e=>{
+    if(/input|textarea|select/i.test(document.activeElement.tagName))return;
+    if(e.key==='ArrowLeft'){go(-1);e.preventDefault();}
+    if(e.key==='ArrowRight'){go(1);e.preventDefault();}
+  });
+
+  genRegions();render();
+})();
+</script>
+</body>
+</html>
