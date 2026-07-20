@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+	<title>Queens</title>
+	<rect width="32" height="32" rx="6" fill="#1b1b23" />
+	<path
+		d="M6 22h20l2-11-6.5 4.5L16 7l-5.5 8.5L4 11z"
+		fill="#f2c14e"
+		stroke="#f2c14e"
+		stroke-width="1.5"
+		stroke-linejoin="round"
+	/>
+	<rect x="6" y="24" width="20" height="3" rx="1.5" fill="#f2c14e" />
+</svg>

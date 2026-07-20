@@ -17,7 +17,7 @@ This is **not** classic N-queens. The rules we must generate for:
 
 A solution is therefore a **permutation** `q(row) → col` (one per row and column) such that (a) each region is hit exactly once and (b) no two chosen cells are king-adjacent. Because it is a permutation, two queens can only ever be king-adjacent if they sit in **consecutive rows** with columns differing by exactly 1 — a useful simplification for both the solver and the checker.
 
-> Adjacency precision note: a common shortcut in solver code is the Manhattan test `abs(dx)+abs(dy) > 2` to mark "safe" ([mathspp](https://mathspp.com/blog/beating-linkedin-queens-with-python)). Given row/column uniqueness this is *equivalent* to the true king-move rule for this puzzle, but the canonical rule to implement and document is **Chebyshev: forbid `max(|dr|,|dc|) == 1`**.
+> Adjacency precision note: a common shortcut in solver code is the Manhattan test `abs(dx)+abs(dy) > 2` to mark "safe" ([mathspp](https://mathspp.com/blog/beating-linkedin-queens-with-python)). Given row/column uniqueness this is _equivalent_ to the true king-move rule for this puzzle, but the canonical rule to implement and document is **Chebyshev: forbid `max(|dr|,|dc|) == 1`**.
 
 ---
 
@@ -31,13 +31,13 @@ Three phases, wrapped in a retry loop:
 Randomised backtracking over rows: for each row pick a random column not sharing a column with, and not king-adjacent to, the queen in the previous row; backtrack on dead ends. This yields a uniformly-ish random valid permutation with the no-touch property. Cost is negligible at N ≤ 11 (the no-touch constraint only couples consecutive rows).
 
 **Phase B — grow N contiguous regions, one seed per queen.**
-Seed each of the N regions on its queen's cell (this **guarantees each region contains exactly one queen**, so the "one queen per region" rule is satisfied *by construction*). Then assign the remaining `N² − N` cells by **multi-source flood fill / region growing**:
+Seed each of the N regions on its queen's cell (this **guarantees each region contains exactly one queen**, so the "one queen per region" rule is satisfied _by construction_). Then assign the remaining `N² − N` cells by **multi-source flood fill / region growing**:
 
 - Maintain a frontier per region; repeatedly pick an unassigned cell orthogonally adjacent to an existing region and attach it to that region.
 - Randomise the growth order (and optionally weight it) to control region shape/balance. Orthogonal-only adjacency during growth keeps every region **4-connected (contiguous)** by construction.
 - Keep growing until every cell is assigned. Optionally cap/steer region sizes for aesthetics.
 
-This "seed-on-the-solution then flood-fill the colors" pattern is exactly how region-based Queens boards are reasoned about in the wild — solvers *read* the board as "a list of sets, where each set contains the grid coordinates belonging to one colored region" ([mathspp](https://mathspp.com/blog/beating-linkedin-queens-with-python)); generation is the inverse of that parse. Contiguous-region identification via flood fill of same-color cells is the standard primitive ([SebiCoroian solver](https://github.com/SebiCoroian/LinkedInQueensGameSolver), [Oscar-sandbox solver](https://github.com/Oscar-sandbox/linkedin-queens-solver)).
+This "seed-on-the-solution then flood-fill the colors" pattern is exactly how region-based Queens boards are reasoned about in the wild — solvers _read_ the board as "a list of sets, where each set contains the grid coordinates belonging to one colored region" ([mathspp](https://mathspp.com/blog/beating-linkedin-queens-with-python)); generation is the inverse of that parse. Contiguous-region identification via flood fill of same-color cells is the standard primitive ([SebiCoroian solver](https://github.com/SebiCoroian/LinkedInQueensGameSolver), [Oscar-sandbox solver](https://github.com/Oscar-sandbox/linkedin-queens-solver)).
 
 **Phase C — uniqueness gate (see §2).**
 Run a solution counter on `(board partition, rules)`. If exactly one solution → keep. If more than one → either **re-grow the regions** (cheap, keep the same hidden solution) or perturb region boundaries to break the alternate solution, then re-check. If after K attempts it won't converge, discard the placement and restart from Phase A.
@@ -46,14 +46,14 @@ Why gate-and-retry rather than "prove unique by construction": region growth doe
 
 ### Alternatives considered
 
-| Approach | How it works | Verdict |
-|---|---|---|
-| **Solution-first + region growing (recommended)** | Sample valid placement, seed regions on queens, flood-fill colors, verify uniqueness | Best fit. Guarantees solvability and one-queen-per-region by construction; regions trivially contiguous; only uniqueness needs verifying. |
-| **Regions-first, then check solvability** | Randomly partition board into N contiguous regions, *then* search for a valid placement | Wasteful: many partitions have zero or many solutions; you pay a full solve just to discover the board is unusable. Loses the free "solvable + one-per-region" guarantee. |
-| **Pure CP/SAT synthesis** | Encode "exists placement, and it is unique" as constraints; let solver emit a board | Elegant but heavier to implement; uniqueness is a meta-constraint (∀ second-solution ¬valid) that CP handles awkwardly. Better used as the *checker* than the *generator*. |
-| **Carve/dig analogy from a full board** | (Sudoku-style clue removal) | Doesn't map cleanly — the "clues" here are the coloring, not removable digits. The region-growth phase is the natural analogue. |
+| Approach                                          | How it works                                                                            | Verdict                                                                                                                                                                    |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Solution-first + region growing (recommended)** | Sample valid placement, seed regions on queens, flood-fill colors, verify uniqueness    | Best fit. Guarantees solvability and one-queen-per-region by construction; regions trivially contiguous; only uniqueness needs verifying.                                  |
+| **Regions-first, then check solvability**         | Randomly partition board into N contiguous regions, _then_ search for a valid placement | Wasteful: many partitions have zero or many solutions; you pay a full solve just to discover the board is unusable. Loses the free "solvable + one-per-region" guarantee.  |
+| **Pure CP/SAT synthesis**                         | Encode "exists placement, and it is unique" as constraints; let solver emit a board     | Elegant but heavier to implement; uniqueness is a meta-constraint (∀ second-solution ¬valid) that CP handles awkwardly. Better used as the _checker_ than the _generator_. |
+| **Carve/dig analogy from a full board**           | (Sudoku-style clue removal)                                                             | Doesn't map cleanly — the "clues" here are the coloring, not removable digits. The region-growth phase is the natural analogue.                                            |
 
-**Tuning knob that matters:** region *irregularity*. Compact, blob-like regions tend to leave more freedom → more likely multiple solutions → more retries but easier puzzles. More elongated/interlocking regions tend toward uniqueness and harder deductions. The growth policy is where difficulty is dialed in (see §4).
+**Tuning knob that matters:** region _irregularity_. Compact, blob-like regions tend to leave more freedom → more likely multiple solutions → more retries but easier puzzles. More elongated/interlocking regions tend toward uniqueness and harder deductions. The growth policy is where difficulty is dialed in (see §4).
 
 ---
 
@@ -61,14 +61,14 @@ Why gate-and-retry rather than "prove unique by construction": region growth doe
 
 **Recommended primary: a backtracking solution-counter that stops at 2 ("second-solution search").**
 
-- Standard, reliable technique for every unique-solution puzzle generator: run a solver that *counts* solutions instead of returning the first, and **abort the moment a second solution is found** — you never need the full count, only "is it ≥ 2?" ([Final Sudoku](https://finalsudoku.com/sudoku-generator), [Sudoku generator write-up](https://dsasse07.medium.com/generating-solving-sudoku-puzzles-9ee1305ced01)).
+- Standard, reliable technique for every unique-solution puzzle generator: run a solver that _counts_ solutions instead of returning the first, and **abort the moment a second solution is found** — you never need the full count, only "is it ≥ 2?" ([Final Sudoku](https://finalsudoku.com/sudoku-generator), [Sudoku generator write-up](https://dsasse07.medium.com/generating-solving-sudoku-puzzles-9ee1305ced01)).
 - Reuse the same DFS/backtracking core used to solve LinkedIn Queens ([mathspp](https://mathspp.com/blog/beating-linkedin-queens-with-python), [SebiCoroian](https://github.com/SebiCoroian/LinkedInQueensGameSolver), [mei128/Queens](https://github.com/mei128/Queens) which "solves recursively, depth-first, using a list of positions per color"). Model as **exact-cover-ish CSP**: variable = which cell in each region holds the queen; prune remaining regions after each placement by removing same-row, same-column and king-adjacent cells; backtrack when any region is emptied. Iterate over regions in **most-constrained-first** order (fewest legal cells) to fail fast.
 - Early termination makes this near-free: "most of the time, the solver either finds exactly one solution or quickly discovers a second one" ([Final Sudoku](https://finalsudoku.com/sudoku-generator)).
 
 **Recommended cross-check / oracle: CP-SAT (Google OR-Tools) with `enumerate_all_solutions`.**
 
-- Model the four constraints and set `enumerate_all_solutions = true`, using a `CpSolverSolutionCallback` that increments a counter and *stops the search at 2 solutions* ([OR-Tools N-Queens](https://developers.google.com/optimization/cp/queens), [OR-Tools CP-SAT](https://developers.google.com/optimization/cp/cp_solver)). CP-SAT does constraint-propagation + backtracking under the hood and is battle-tested.
-- Scale sanity from the official N-queens benchmark (plain n-queens, *no* color/king constraints, which has vastly more solutions than our variant): N=12 → 14,200 solutions in ~2.2 s; N=14 → 365,596 in ~62 s ([OR-Tools N-Queens](https://developers.google.com/optimization/cp/queens)). Our variant is far more constrained (target = exactly 1 solution), so enumeration terminates almost immediately. These numbers are an **upper bound on how hard enumeration could ever get** at these sizes — reassuringly small.
+- Model the four constraints and set `enumerate_all_solutions = true`, using a `CpSolverSolutionCallback` that increments a counter and _stops the search at 2 solutions_ ([OR-Tools N-Queens](https://developers.google.com/optimization/cp/queens), [OR-Tools CP-SAT](https://developers.google.com/optimization/cp/cp_solver)). CP-SAT does constraint-propagation + backtracking under the hood and is battle-tested.
+- Scale sanity from the official N-queens benchmark (plain n-queens, _no_ color/king constraints, which has vastly more solutions than our variant): N=12 → 14,200 solutions in ~2.2 s; N=14 → 365,596 in ~62 s ([OR-Tools N-Queens](https://developers.google.com/optimization/cp/queens)). Our variant is far more constrained (target = exactly 1 solution), so enumeration terminates almost immediately. These numbers are an **upper bound on how hard enumeration could ever get** at these sizes — reassuringly small.
 
 **SAT (DIMACS CNF + a solver like Clasp/MiniSat)** is a viable third option ([sat-nqueens encoder](https://github.com/bglezseoane/sat-nqueens), [N-Queens with SAT](https://jxtopher.github.io/Jxtopher/curiosity/n-queens-with-sat-solver.html)); uniqueness = add the negation of the found model as a clause and check for UNSAT. More encoding overhead than CP-SAT for no practical gain here.
 

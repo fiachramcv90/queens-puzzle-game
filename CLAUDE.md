@@ -4,6 +4,23 @@ A Queens logic puzzle game — one queen per row, column, and colored region; no
 
 Foundation and MVP scope are being charted with the `wayfinder` skill. See the map in the issue tracker.
 
+## Working in this repo
+
+`README.md` covers local setup, scripts and env vars; `docs/deployment.md` covers Vercel and
+Supabase. The build spec every slice implements is GitHub issue **#18**.
+
+Two conventions worth stating up front, because breaking them is quiet:
+
+- **Domain language is fixed** — _region_, _queen_, _mark (X)_, _the daily_, _the pool_, _rollover_,
+  _solve time_, _streak_. Use those words in code, tests and UI; don't drift to synonyms.
+- **The `service_role` key never reaches the client.** It is read only from `src/lib/server/`, only
+  through `$env/dynamic/private`, and it never gets a `PUBLIC_` prefix.
+
+Tunable operational numbers (rate limits, retention, pool horizon) belong in `src/lib/config/`, not
+inline. Rules — adjacency, the ranked-play filter — are code, not config.
+
+Before pushing: `npm run typecheck && npm run lint && npm run test`.
+
 ## Skills (vendored, cloud-ready)
 
 The engineering workflow skills are vendored under `.claude/skills/` (from

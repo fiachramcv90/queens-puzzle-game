@@ -1,0 +1,8 @@
+# Migrations live here, one timestamped .sql file each.
+#
+# Create one with `supabase migration new <name>`, apply it locally with
+# `supabase db reset`, and never edit a migration that has been applied to a
+# deployed database — write a follow-up instead.
+#
+# The schema itself lands in a later slice (see the data model section of the
+# MVP build spec). This directory exists so the first migration has a home.
