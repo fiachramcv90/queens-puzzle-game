@@ -46,20 +46,21 @@ machine and are worthless outside your laptop — but `.env` is gitignored regar
 
 ## Environment variables
 
-| Variable                    | Where it lives                                               |
-| --------------------------- | ------------------------------------------------------------ |
-| `PUBLIC_SUPABASE_URL`       | Client and server. Public.                                   |
-| `PUBLIC_SUPABASE_ANON_KEY`  | Client and server. Public by design — RLS protects the data. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only, and a GitHub Actions secret. Never the client.  |
+| Variable                          | Where it lives                                               |
+| --------------------------------- | ------------------------------------------------------------ |
+| `PUBLIC_SUPABASE_URL`             | Client and server. Public.                                   |
+| `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Client and server. Public by design — RLS protects the data. |
+| `SUPABASE_SECRET_KEY`             | Server only, and a GitHub Actions secret. Never the client.  |
 
-The `service_role` key bypasses RLS completely. Two mechanisms keep it out of the browser bundle,
-and both are load-bearing: it is read only from [`src/lib/server/supabase-env.ts`](src/lib/server/supabase-env.ts),
+The secret key bypasses RLS completely. Two mechanisms keep it out of the browser bundle, and both
+are load-bearing: it is read only from [`src/lib/server/supabase-env.ts`](src/lib/server/supabase-env.ts),
 which SvelteKit refuses to import into client-reachable code, and it is read through
 `$env/dynamic/private`, which refuses to expose anything without a `PUBLIC_` prefix. Adding a
 `PUBLIC_` prefix to it would defeat both at once — don't.
 
-Newer Supabase projects issue these as a **publishable** key (`sb_publishable_…`, the anon key) and
-a **secret** key (`sb_secret_…`, the `service_role` key). Same two roles, newer names.
+Supabase names these the **publishable** key (`sb_publishable_…`) and the **secret** key
+(`sb_secret_…`). The build spec calls them by their older names, the **anon** key and the
+**`service_role`** key — same two roles either way.
 
 ## Scripts
 

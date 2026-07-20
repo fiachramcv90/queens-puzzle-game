@@ -1,8 +1,9 @@
 import { env } from '$env/dynamic/private';
 
 /**
- * The `service_role` key bypasses RLS entirely, so it must never reach the
- * browser and must never be committed.
+ * The Supabase secret key bypasses RLS entirely, so it must never reach the
+ * browser and must never be committed. (Supabase used to call this the
+ * `service_role` key, which is the name the build spec uses.)
  *
  * Two things keep it out of the bundle. SvelteKit refuses to import anything
  * under `$lib/server` into client-reachable code, and `$env/dynamic/private`
@@ -12,13 +13,11 @@ import { env } from '$env/dynamic/private';
  * It is supplied as a Vercel environment variable (server-side scope) and as a
  * GitHub Actions secret for the offline pool generator. Nothing else holds it.
  */
-export function serviceRoleKey(): string {
-	const key = env.SUPABASE_SERVICE_ROLE_KEY;
+export function supabaseSecretKey(): string {
+	const key = env.SUPABASE_SECRET_KEY;
 
 	if (!key) {
-		throw new Error(
-			'SUPABASE_SERVICE_ROLE_KEY is not set. It is a server-side secret — see README.md.'
-		);
+		throw new Error('SUPABASE_SECRET_KEY is not set. It is a server-side secret — see README.md.');
 	}
 
 	return key;

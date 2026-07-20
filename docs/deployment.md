@@ -18,13 +18,13 @@ Pushing to `main` deploys production; every pull request gets a preview deployme
 ### Environment variables to set in Vercel
 
 Project Settings → Environment Variables. Values come from the Supabase dashboard, Project Settings
-→ API.
+→ API keys.
 
-| Variable                    | Environments                     | Scope                                  |
-| --------------------------- | -------------------------------- | -------------------------------------- |
-| `PUBLIC_SUPABASE_URL`       | Production, Preview, Development | Exposed to the browser — intended      |
-| `PUBLIC_SUPABASE_ANON_KEY`  | Production, Preview, Development | Exposed to the browser — intended      |
-| `SUPABASE_SERVICE_ROLE_KEY` | Production, Preview              | **Server-side only. Never `PUBLIC_`.** |
+| Variable                          | Environments                     | Scope                                  |
+| --------------------------------- | -------------------------------- | -------------------------------------- |
+| `PUBLIC_SUPABASE_URL`             | Production, Preview, Development | Exposed to the browser — intended      |
+| `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Production, Preview, Development | Exposed to the browser — intended      |
+| `SUPABASE_SECRET_KEY`             | Production, Preview              | **Server-side only. Never `PUBLIC_`.** |
 
 Naming that last one with a `PUBLIC_` prefix would ship it to every visitor — see the environment
 variables section of the [README](../README.md#environment-variables) for why. If it happens,
@@ -35,8 +35,8 @@ rotate the key in the Supabase dashboard.
 CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs typecheck, lint and tests. It
 needs no secrets — nothing in it talks to Supabase.
 
-The offline pool generator, which lands in a later slice, will need `SUPABASE_SERVICE_ROLE_KEY` as
-a repository **secret** (Settings → Secrets and variables → Actions). That is the only place in the
+The offline pool generator, which lands in a later slice, will need `SUPABASE_SECRET_KEY` as a
+repository **secret** (Settings → Secrets and variables → Actions). That is the only place in the
 repo's automation the key belongs.
 
 ## Supabase
