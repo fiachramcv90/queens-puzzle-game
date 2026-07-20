@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 concurrency:
@@ -11,7 +10,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, lint and test
+    name: Typecheck, lint, test and build
     runs-on: ubuntu-latest
 
     steps:
@@ -29,3 +28,6 @@ jobs:
       - run: npm run lint
 
       - run: npm run test
+
+      # Catches an adapter or runtime misconfiguration here rather than on Vercel.
+      - run: npm run build

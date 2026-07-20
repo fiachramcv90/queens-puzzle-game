@@ -26,8 +26,9 @@ Project Settings → Environment Variables. Values come from the Supabase dashbo
 | `PUBLIC_SUPABASE_ANON_KEY`  | Production, Preview, Development | Exposed to the browser — intended      |
 | `SUPABASE_SERVICE_ROLE_KEY` | Production, Preview              | **Server-side only. Never `PUBLIC_`.** |
 
-The `service_role` key bypasses RLS entirely. If it ever ends up in a variable named with a
-`PUBLIC_` prefix, it ships to every visitor. Rotate it in the Supabase dashboard if that happens.
+Naming that last one with a `PUBLIC_` prefix would ship it to every visitor — see the environment
+variables section of the [README](../README.md#environment-variables) for why. If it happens,
+rotate the key in the Supabase dashboard.
 
 ## GitHub Actions
 

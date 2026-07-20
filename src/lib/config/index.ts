@@ -65,6 +65,3 @@ export const limits = {
 	/** Soft cap on accepted friendships per account. */
 	friendsPerAccount: 1000
 } as const;
-
-/** The daily rollover happens at midnight in this zone, for every player. */
-export const ROLLOVER_TIME_ZONE = 'Europe/Dublin';

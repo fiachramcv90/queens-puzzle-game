@@ -13,8 +13,8 @@ Two conventions worth stating up front, because breaking them is quiet:
 
 - **Domain language is fixed** — _region_, _queen_, _mark (X)_, _the daily_, _the pool_, _rollover_,
   _solve time_, _streak_. Use those words in code, tests and UI; don't drift to synonyms.
-- **The `service_role` key never reaches the client.** It is read only from `src/lib/server/`, only
-  through `$env/dynamic/private`, and it never gets a `PUBLIC_` prefix.
+- **The `service_role` key never reaches the client.** How that is enforced is documented once, in
+  `src/lib/server/supabase-env.ts`. Read it before touching anything that handles keys.
 
 Tunable operational numbers (rate limits, retention, pool horizon) belong in `src/lib/config/`, not
 inline. Rules — adjacency, the ranked-play filter — are code, not config.

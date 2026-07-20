@@ -1,14 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import {
-	heartbeat,
-	limits,
-	pool,
-	rateLimits,
-	retention,
-	ROLLOVER_TIME_ZONE,
-	type RateLimitName
-} from './index';
+import { heartbeat, limits, pool, rateLimits, retention, type RateLimitName } from './index';
 
 describe('rate limits', () => {
 	const names = Object.keys(rateLimits) as RateLimitName[];
@@ -44,12 +36,6 @@ describe('heartbeat', () => {
 describe('retention', () => {
 	it('drops move logs no later than the guest plays that carry them', () => {
 		expect(retention.moveLogsDays).toBeLessThanOrEqual(retention.guestPlaysDays);
-	});
-});
-
-describe('rollover', () => {
-	it('names a zone the platform can resolve', () => {
-		expect(() => new Intl.DateTimeFormat('en-IE', { timeZone: ROLLOVER_TIME_ZONE })).not.toThrow();
 	});
 });
 
