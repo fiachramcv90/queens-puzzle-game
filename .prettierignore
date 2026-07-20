@@ -1,0 +1,9 @@
+# Managed by tooling, not by hand
+package-lock.json
+.svelte-kit
+build
+.vercel
+node_modules
+
+# Vendored from https://github.com/mattpocock/skills — keep upstream formatting
+.claude/skills

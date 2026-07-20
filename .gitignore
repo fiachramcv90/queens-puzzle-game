@@ -1,5 +1,33 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
 # Claude Code agent worktrees (transient)
 .claude/worktrees/
 
 # Local, per-user Claude Code settings
 .claude/settings.local.json
+
+# Supabase local stack
+supabase/.branches
+supabase/.temp
