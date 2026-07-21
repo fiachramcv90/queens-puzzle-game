@@ -107,7 +107,7 @@ _dominant_ (largest weight), not absolute.
 ## Consequences
 
 - **Recalibration is data, not migration.** All raw signals are retained, so
-  re-fitting `WEIGHTS`, the `SAT` constants, `DEPTH_K`, or `TIER_LOWER_BOUNDS`
+  re-fitting `WEIGHTS`, the `HALF_SATURATION` constants, `DEPTH_K`, or `TIER_LOWER_BOUNDS`
   against observed solve times touches only `difficulty.ts`. Bump
   `GENERATOR_VERSION` if a change alters stored scores.
 - **Tier reachability is size-dependent.** The generator's rival-breaking repair

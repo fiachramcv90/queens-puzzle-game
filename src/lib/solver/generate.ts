@@ -1,5 +1,6 @@
 import { scoreDifficulty, type DifficultySignals, type DifficultyTier } from './difficulty';
 import { boardHash } from './hash';
+import { collectSolutions } from './region-search';
 import { extractSignals } from './signals';
 import { makeRng, randInt, shuffledRange, type Rng } from './rng';
 import type { Cell, RegionMap } from './types';
@@ -100,10 +101,13 @@ const TIER_BIAS: Record<DifficultyTier, number> = {
  * Solution-first (see the research note `docs/research/puzzle-generation-uniqueness.md`):
  * sample a valid queen placement, seed one region per queen, flood-fill the rest
  * into N contiguous regions, and gate on uniqueness. Solvability, one-queen-per-
- * region and contiguity hold **by construction**; only uniqueness is checked, via
- * {@link countSolutions} stopping at 2. When a second solution exists the regions
- * are re-grown against the same hidden solution (cheap); after enough failures the
- * placement is restarted.
+ * region and contiguity hold **by construction**; only uniqueness needs work.
+ *
+ * The uniqueness search is the shared region backtracker ({@link collectSolutions}),
+ * stopping at 2. When a second solution exists the map is repaired toward
+ * uniqueness (see
+ * {@link repairToUnique}); after enough failures the regions are re-grown and,
+ * failing that, the placement restarted.
  *
  * Always returns a valid unique board — it does not target a tier. Use
  * {@link generate} when you need a specific tier. Reproducible: the same `seed`
@@ -320,7 +324,7 @@ function repairToUnique(
 	for (const { row, col } of placement) hiddenCols[row] = col;
 
 	for (let step = 0; step < MAX_REPAIRS; step++) {
-		const solutions = findSolutions(map, 2);
+		const solutions = collectSolutions(map, 2);
 		if (solutions.length <= 1) return map;
 
 		const rival =
@@ -330,7 +334,7 @@ function repairToUnique(
 		if (!breakRival(size, map, rival, seedKeys, rng)) return null;
 	}
 
-	return findSolutions(map, 2).length === 1 ? map : null;
+	return collectSolutions(map, 2).length === 1 ? map : null;
 }
 
 /**
@@ -410,78 +414,6 @@ function regionIsContiguous(size: number, map: number[][], region: number): bool
 		}
 	}
 	return seen.size === cells.length;
-}
-
-/**
- * Find up to `cap` full solutions of a region map, each as one queen per row in
- * row order. The same most-constrained-region search {@link countSolutions} uses,
- * but returning the placements themselves so a rival can be broken.
- */
-function findSolutions(regionMap: RegionMap, cap: number): Cell[][] {
-	const size = regionMap.length;
-	const regionCells = new Map<number, Cell[]>();
-	for (let row = 0; row < size; row++) {
-		for (let col = 0; col < size; col++) {
-			const region = regionMap[row][col];
-			let cells = regionCells.get(region);
-			if (!cells) regionCells.set(region, (cells = []));
-			cells.push({ row, col });
-		}
-	}
-	const regions = [...regionCells.keys()];
-	const usedRow = new Array<boolean>(size).fill(false);
-	const usedCol = new Array<boolean>(size).fill(false);
-	const placed: Cell[] = [];
-	const assigned = new Set<number>();
-	const found: Cell[][] = [];
-
-	const candidates = (region: number): Cell[] =>
-		regionCells
-			.get(region)!
-			.filter(
-				(cell) =>
-					!usedRow[cell.row] &&
-					!usedCol[cell.col] &&
-					placed.every(
-						(q) => Math.max(Math.abs(q.row - cell.row), Math.abs(q.col - cell.col)) !== 1
-					)
-			);
-
-	const search = (): void => {
-		if (found.length >= cap) return;
-		if (assigned.size === regions.length) {
-			found.push([...placed].sort((a, b) => a.row - b.row));
-			return;
-		}
-		let target: number | null = null;
-		let targetCandidates: Cell[] = [];
-		for (const region of regions) {
-			if (assigned.has(region)) continue;
-			const cells = candidates(region);
-			if (target === null || cells.length < targetCandidates.length) {
-				target = region;
-				targetCandidates = cells;
-				if (cells.length === 0) break;
-			}
-		}
-		if (target === null) return;
-
-		for (const cell of targetCandidates) {
-			usedRow[cell.row] = true;
-			usedCol[cell.col] = true;
-			placed.push(cell);
-			assigned.add(target);
-			search();
-			assigned.delete(target);
-			placed.pop();
-			usedCol[cell.col] = false;
-			usedRow[cell.row] = false;
-			if (found.length >= cap) return;
-		}
-	};
-
-	search();
-	return found;
 }
 
 /** A time-derived seed for when the caller does not supply one. */

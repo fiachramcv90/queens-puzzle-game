@@ -86,7 +86,7 @@ const WEIGHTS = {
  * signal value that maps to 0.5. Picked to sit near the middle of each signal's
  * observed range at sizes 7–11. Tunable; see the ADR.
  */
-const SAT = {
+const HALF_SATURATION = {
 	sizeVariance: 2,
 	perimeterArea: 3,
 	rowColSpan: 8,
@@ -138,13 +138,13 @@ export function scoreDifficulty(signals: DifficultySignals): DifficultyResult {
 	const nDepth = signals.forcedDeductionDepth / (signals.forcedDeductionDepth + DEPTH_K);
 	const nSize = clamp01((signals.size - MIN_SIZE) / (MAX_SIZE - MIN_SIZE));
 	const nIrregularity =
-		(saturate(signals.regionSizeVariance, SAT.sizeVariance) +
-			saturate(signals.regionPerimeterAreaRatio, SAT.perimeterArea) +
-			saturate(signals.regionRowColSpan, SAT.rowColSpan)) /
+		(saturate(signals.regionSizeVariance, HALF_SATURATION.sizeVariance) +
+			saturate(signals.regionPerimeterAreaRatio, HALF_SATURATION.perimeterArea) +
+			saturate(signals.regionRowColSpan, HALF_SATURATION.rowColSpan)) /
 		3;
 	const nEffort =
-		(saturate(signals.solverNodes, SAT.nodes) +
-			saturate(signals.solverBacktracks, SAT.backtracks)) /
+		(saturate(signals.solverNodes, HALF_SATURATION.nodes) +
+			saturate(signals.solverBacktracks, HALF_SATURATION.backtracks)) /
 		2;
 
 	const score =
