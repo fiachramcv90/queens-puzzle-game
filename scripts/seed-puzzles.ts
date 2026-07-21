@@ -70,7 +70,7 @@ async function seedEntry(sql: postgres.Sql, entry: SeedEntry): Promise<'inserted
 		} else {
 			[{ id }] = await tx<{ id: string }[]>`
         insert into public.puzzles (board_size, region_map, tier)
-        values (${pub.size}, ${JSON.stringify(pub.regionMap)}::jsonb, ${pub.tier})
+        values (${pub.size}, ${sql.json(pub.regionMap)}, ${pub.tier})
         returning id
       `;
 			await tx`
@@ -78,9 +78,9 @@ async function seedEntry(sql: postgres.Sql, entry: SeedEntry): Promise<'inserted
           (puzzle_id, solution, difficulty_score, difficulty_signals, generator_version, canonical_hash)
         values (
           ${id},
-          ${JSON.stringify(secret.solution)}::jsonb,
+          ${sql.json(secret.solution)},
           ${secret.score},
-          ${JSON.stringify(secret.signals)}::jsonb,
+          ${sql.json(secret.signals)},
           ${secret.generatorVersion},
           ${secret.hash}
         )
