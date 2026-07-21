@@ -64,18 +64,21 @@ Supabase names these the **publishable** key (`sb_publishable_…`) and the **se
 
 ## Scripts
 
-| Script               | What it does                          |
-| -------------------- | ------------------------------------- |
-| `npm run dev`        | Dev server on <http://localhost:5173> |
-| `npm run build`      | Production build (Vercel adapter)     |
-| `npm run preview`    | Serve the production build locally    |
-| `npm run typecheck`  | `svelte-check` across the app         |
-| `npm run lint`       | Prettier check + ESLint               |
-| `npm run format`     | Prettier write                        |
-| `npm run test`       | Vitest, once                          |
-| `npm run test:watch` | Vitest, watching                      |
+| Script               | What it does                                                       |
+| -------------------- | ------------------------------------------------------------------ |
+| `npm run dev`        | Dev server on <http://localhost:5173>                              |
+| `npm run build`      | Production build (Vercel adapter)                                  |
+| `npm run preview`    | Serve the production build locally                                 |
+| `npm run typecheck`  | `svelte-check` across the app                                      |
+| `npm run lint`       | Prettier check + ESLint                                            |
+| `npm run format`     | Prettier write                                                     |
+| `npm run test`       | Vitest unit tests, once                                            |
+| `npm run test:watch` | Vitest unit tests, watching                                        |
+| `npm run test:db`    | RLS/DB integration tests (needs `supabase start`)                  |
+| `npm run seed`       | Seed local puzzles for today + past dates (needs `supabase start`) |
 
-CI runs `typecheck`, `lint` and `test` on every push to `main` and every pull request
+CI runs `typecheck`, `lint`, `test` and `build` on every push to `main` and every pull request; a
+separate job brings up Supabase and runs `test:db`
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Tests
@@ -87,6 +90,16 @@ not three hand-written boards.
 
 The build spec names two testing seams and only two: the solver core as a pure library, and the
 Edge Function HTTP contract against a local Supabase with real RLS.
+
+Database integration tests live under [`tests/db/`](tests/db/) and run under a separate config
+(`npm run test:db`). They assert Row Level Security against a **running local Supabase with the real
+policies**, never a mock: a policy is only truly tested by the policy engine enforcing it. They need
+`supabase start` up first, so they are excluded from `npm run test` and run in their own CI job.
+
+To render real boards while developing later slices, seed a handful of puzzles — today plus several
+past dates — with `npm run seed`. It generates boards with the real solver core and writes both
+halves (public into `puzzles`, server-only into `puzzle_solutions`) plus a `puzzle_schedule` row per
+date. It is reproducible and idempotent: re-running seeds nothing new.
 
 ## Supabase
 
