@@ -31,3 +31,31 @@ jobs:
 
       # Catches an adapter or runtime misconfiguration here rather than on Vercel.
       - run: npm run build
+
+  db-tests:
+    name: RLS and schedule visibility against a real Supabase
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The RLS assertions are only meaningful against the real policy engine, so
+      # bring up a local Supabase and run them against it — never a mock.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - run: supabase start
+
+      - run: npm run test:db
+
+      # The seed uses the solver core to write real boards — running it after the
+      # RLS tests proves the seed path stays green without contending for dates.
+      - run: npm run seed
