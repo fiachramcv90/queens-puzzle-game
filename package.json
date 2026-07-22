@@ -16,6 +16,7 @@
 		"test:watch": "vitest",
 		"test:db": "vitest run --config vitest.db.config.ts",
 		"seed": "tsx scripts/seed-puzzles.ts",
+		"build:edge-bundles": "node scripts/build-edge-bundles.mjs",
 		"supabase:start": "supabase start",
 		"supabase:stop": "supabase stop"
 	},

@@ -9,7 +9,9 @@
  * Ticket #19 delivered the shared vocabulary plus the two rule-level functions,
  * {@link checkRules} and {@link countSolutions}. Ticket #20 adds the generation
  * half: {@link generate}/{@link generatePuzzle}, difficulty scoring, and the
- * canonical {@link boardHash}. The replay half lands later against these types.
+ * canonical {@link boardHash}. Ticket #23 adds the server's replay half:
+ * {@link replayMoveLog} and {@link decideSubmission}, which the submit Edge
+ * Function runs against these same types.
  */
 
 export type { Board, Cell, CellState, Move, MoveLog, RegionMap } from './types';
@@ -36,3 +38,11 @@ export {
 } from './difficulty';
 export { extractSignals } from './signals';
 export { boardHash } from './hash';
+export { replayMoveLog, type ReplayResult } from './replay';
+export {
+	decideSubmission,
+	type SubmissionInput,
+	type SubmissionDecision,
+	type SubmissionAccepted,
+	type SubmissionRejected
+} from './submit-decision';

@@ -48,7 +48,11 @@ supabase link --project-ref lexraaeqxhrqoekafwqt
 supabase db push
 ```
 
-Edge Functions deploy with `supabase functions deploy <name>`.
+Edge Functions deploy with `supabase functions deploy <name>` (the play lifecycle is
+`start`, `heartbeat` and `submit`). They load a bundled copy of the solver and config from
+`supabase/functions/_shared/*.bundle.js`, because Deno cannot import `src/lib`. Rebuild the bundles
+with `npm run build:edge-bundles` and commit them before deploying — CI fails if the checked-in
+bundle has drifted from the source.
 
 Neither is wired into CI yet. Doing that is deliberate: the schema does not exist yet, and an
 automatic `db push` against production is a decision to make once there is a schema worth

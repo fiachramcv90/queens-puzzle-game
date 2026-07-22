@@ -386,6 +386,19 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# The play-lifecycle functions are guest-capable: a player with no session must be
+# able to start, heartbeat and submit. Identity is the guest UUID in the request
+# body, not a JWT, so JWT verification is off for these three. They still run on
+# service_role and remain the only write path to `plays`.
+[functions.start]
+verify_jwt = false
+
+[functions.heartbeat]
+verify_jwt = false
+
+[functions.submit]
+verify_jwt = false
+
 # Local log aggregation (Logflare + Vector). Off by default: it is the heaviest
 # part of the local stack and nothing in development reads it.
 [analytics]

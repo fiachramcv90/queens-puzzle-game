@@ -14,10 +14,10 @@
  */
 
 import { checkRules } from '$lib/solver';
-import type { Board, Cell, DifficultyTier, RegionMap } from '$lib/solver';
+import type { Board, Cell, DifficultyTier, Move, MoveLog, RegionMap } from '$lib/solver';
 import { createEmptyBoard, sweepX, tapCell, toggleXCell } from './board';
 import { deriveConflicts } from './conflicts';
-import type { Daily, PersistedPlay } from './types';
+import type { Daily, PersistedPlay, PlayResult } from './types';
 
 export class GameState {
 	readonly puzzleId: string;
@@ -37,6 +37,18 @@ export class GameState {
 	solvedElapsedMs: number | undefined = $state(undefined);
 	/** Wall clock the host bumps each second to advance the running timer. */
 	nowMs: number = $state(Date.now());
+	/** The opaque server play token, once `start` has returned it. */
+	token: string | undefined = $state(undefined);
+	/** The server's recorded result, once the solve has been submitted. */
+	result: PlayResult | undefined = $state(undefined);
+
+	/**
+	 * The move log: every cell state-change in order, `t` ms since the play start.
+	 * The server replays it to derive mistakes and to verify the board, so it is
+	 * carried here (and persisted) rather than reconstructed. Not reactive — nothing
+	 * renders from it directly.
+	 */
+	private moves: Move[] = [];
 
 	/** Cells to ring red — exactly the shared solver core's conflict set. */
 	readonly conflicts: ReadonlySet<string> = $derived(deriveConflicts(this.board, this.regionMap));
@@ -61,25 +73,30 @@ export class GameState {
 		this.board = usable ? usable.board : createEmptyBoard(daily.boardSize);
 		this.startedAt = usable ? usable.startedAt : Date.now();
 		this.solvedElapsedMs = usable?.solvedElapsedMs;
+		this.moves = usable?.moveLog ? [...usable.moveLog] : [];
+		this.token = usable?.token;
+		this.result = usable?.result;
 		this.nowMs = Date.now();
 	}
 
 	/** Tap a cell, advancing it through `empty → X → queen → empty`. */
 	tap(row: number, col: number): void {
-		this.board = tapCell(this.board, row, col);
-		this.freezeIfSolved();
+		this.applyMove(tapCell(this.board, row, col));
 	}
 
 	/** Right-click: toggle an X on a cell directly, skipping the cycle. */
 	toggleX(row: number, col: number): void {
-		this.board = toggleXCell(this.board, row, col);
-		this.freezeIfSolved();
+		this.applyMove(toggleXCell(this.board, row, col));
 	}
 
 	/** Drag-sweep: mark a run of cells with X in one gesture. */
 	sweep(cells: readonly Cell[]): void {
-		this.board = sweepX(this.board, cells);
-		this.freezeIfSolved();
+		this.applyMove(sweepX(this.board, cells));
+	}
+
+	/** The move log so far — what the client submits and persists. */
+	moveLog(): MoveLog {
+		return this.moves;
 	}
 
 	/** The play as it should be persisted right now. */
@@ -88,8 +105,31 @@ export class GameState {
 			puzzleId: this.puzzleId,
 			board: this.board,
 			startedAt: this.startedAt,
-			solvedElapsedMs: this.solvedElapsedMs
+			solvedElapsedMs: this.solvedElapsedMs,
+			moveLog: this.moves,
+			token: this.token,
+			result: this.result
 		};
+	}
+
+	/**
+	 * Swap in a new board, logging every cell that changed as a move so the log
+	 * captures exactly what the player did. Diffing here keeps recording in one
+	 * place, correct no matter which interaction (tap, toggle, sweep) produced the
+	 * new board. `t` is ms since the play start, so it survives the server anchoring
+	 * `startedAt` after `start` returns.
+	 */
+	private applyMove(next: Board): void {
+		const t = Math.max(0, Date.now() - this.startedAt);
+		for (let row = 0; row < next.length; row++) {
+			for (let col = 0; col < next[row].length; col++) {
+				if (next[row][col] !== this.board[row][col]) {
+					this.moves.push({ t, row, col, to: next[row][col] });
+				}
+			}
+		}
+		this.board = next;
+		this.freezeIfSolved();
 	}
 
 	/**

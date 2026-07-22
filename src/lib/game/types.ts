@@ -9,7 +9,7 @@
  * persisted play a refresh restores.
  */
 
-import type { Board, RegionMap } from '$lib/solver';
+import type { Board, MoveLog, RegionMap } from '$lib/solver';
 import type { DifficultyTier } from '$lib/solver';
 
 /**
@@ -41,17 +41,49 @@ export interface GuestPrefs {
 }
 
 /**
- * One puzzle's in-progress play, as persisted. The board is the full mark-up so a
- * refresh restores exactly what the player left; `startedAt` and `solvedElapsedMs`
- * drive the DISPLAY-ONLY timer (the server owns credited time in the next ticket).
+ * The result the server recorded for a completed play, as the result screen shows
+ * it. Credited time and mistakes are the server's numbers, never the client's —
+ * the display timer above is only ever a preview of `elapsedMs`.
+ */
+export interface PlayResult {
+	/** Credited time: server wall-clock, the number that counts. */
+	readonly elapsedMs: number;
+	/** Server-derived mistakes, or null when the solve could not be verified. */
+	readonly mistakes: number | null;
+	/** No heartbeat within the stale window: still counted, dropped from ranking. */
+	readonly stale: boolean;
+	/** The move log did not replay to the submitted board. */
+	readonly unverified: boolean;
+	/** A later attempt at an already-solved daily: practice, no ranking. */
+	readonly replay: boolean;
+	/** 1 for the first attempt at this daily, incrementing per later attempt. */
+	readonly attemptNo: number;
+}
+
+/**
+ * One puzzle's in-progress (or completed) play, as persisted. The board is the
+ * full mark-up so a refresh restores exactly what the player left; the move log is
+ * kept alongside it so a refresh mid-solve does not lose the record the server
+ * replays (losing it would flag an honest solve `unverified`). `startedAt` and
+ * `solvedElapsedMs` drive the display-only timer; `token` and `result` carry the
+ * server-authoritative play across reloads.
  */
 export interface PersistedPlay {
 	readonly puzzleId: string;
 	readonly board: Board;
-	/** Epoch milliseconds the play's timer started. */
+	/** Epoch milliseconds the play's timer started (the server's start, once known). */
 	readonly startedAt: number;
 	/** Frozen elapsed milliseconds once solved; absent while still solving. */
 	readonly solvedElapsedMs?: number;
+	/**
+	 * The move log so far — replayed by the server, so it must survive a refresh.
+	 * Optional so a blob written before this feature still loads (it restores empty).
+	 */
+	readonly moveLog?: MoveLog;
+	/** The opaque server play token, once `start` has returned it. */
+	readonly token?: string;
+	/** The server's recorded result, once the solve has been submitted. */
+	readonly result?: PlayResult;
 }
 
 /**

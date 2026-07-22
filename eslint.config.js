@@ -13,6 +13,9 @@ export default ts.config(
 			'node_modules/',
 			// Vendored from https://github.com/mattpocock/skills.
 			'.claude/skills/',
+			// Ephemeral git worktrees Claude Code creates for sub-agents; they carry
+			// their own generated .svelte-kit output and are never part of the repo.
+			'.claude/worktrees/',
 			// Edge Functions run on Deno and are checked by the Supabase CLI.
 			'supabase/functions/'
 		]

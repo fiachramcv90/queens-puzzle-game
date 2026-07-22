@@ -23,6 +23,14 @@ jobs:
 
       - run: npm ci
 
+      # The Edge Functions load a bundled copy of the solver and config
+      # (src/lib can't be imported from Deno). Rebuild it and fail if the checked-in
+      # bundle is stale — a solver change that forgets to rebuild would ship a
+      # deployed function running old rules.
+      - run: npm run build:edge-bundles
+      - name: Edge bundles are up to date
+        run: git diff --exit-code supabase/functions/_shared/
+
       - run: npm run typecheck
 
       - run: npm run lint
@@ -46,8 +54,14 @@ jobs:
 
       - run: npm ci
 
-      # The RLS assertions are only meaningful against the real policy engine, so
-      # bring up a local Supabase and run them against it — never a mock.
+      # Build the Edge Function bundle before the stack comes up, so the
+      # play-lifecycle functions the contract tests hit are the current code.
+      - run: npm run build:edge-bundles
+
+      # The RLS assertions and the HTTP contract are only meaningful against the
+      # real policy engine and the real Edge Functions, so bring up a local
+      # Supabase (which also serves the functions) and run them against it — never
+      # a mock.
       - uses: supabase/setup-cli@v1
         with:
           version: latest
