@@ -48,11 +48,12 @@ Deno.serve(async (req) => {
 		return json({ error: 'could not start play' }, 500);
 	}
 
-	// start_play returns the plays row (composite).
-	const play = data as { token: string; started_at: string; attempt_no: number };
+	// start_play returns the plays row (composite). The client needs only the token
+	// to hold and the server's authoritative start for its display timer; attempt_no
+	// surfaces on the result screen from `submit`, so it is not echoed here.
+	const play = data as { token: string; started_at: string };
 	return json({
 		token: play.token,
-		startedAt: play.started_at,
-		attemptNo: play.attempt_no
+		startedAt: play.started_at
 	});
 });

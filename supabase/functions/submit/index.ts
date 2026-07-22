@@ -38,7 +38,12 @@ interface LoadedPlay {
 	prior_completed_exists: boolean | null;
 }
 
-/** jsonb should arrive parsed, but tolerate a double-encoded string (see +page.ts). */
+/**
+ * The DB→domain boundary for the region map. jsonb should arrive already parsed,
+ * but a value stored as a JSON string is parsed here rather than trusted to be an
+ * array — the same anti-corruption guard the page loader applies, so a storage
+ * quirk can never reach the rule check.
+ */
 function asRegionMap(value: RegionMap | string): RegionMap {
 	return typeof value === 'string' ? (JSON.parse(value) as RegionMap) : value;
 }

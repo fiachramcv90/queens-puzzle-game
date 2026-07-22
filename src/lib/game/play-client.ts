@@ -17,7 +17,6 @@ export interface StartResult {
 	readonly token: string;
 	/** ISO timestamp the server clocked the play as starting. */
 	readonly startedAt: string;
-	readonly attemptNo: number;
 }
 
 /** The fetch surface these calls need — the platform `fetch`, or a test's fake. */

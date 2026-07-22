@@ -2,9 +2,16 @@
  * Server hooks — the Vercel-hosted edge in front of the play proxy routes.
  *
  * Its one job today is the per-IP rate limits the spec puts on `start` and
- * `submit`. It runs before the `/api/play/*` routes resolve, so a flood is turned
- * away with a 429 before it can reach the Supabase Edge Functions behind them.
+ * `submit`. It runs before the `/api/play/*` routes resolve, so a flood through the
+ * proxy is turned away with a 429 before it reaches the Supabase Edge Functions.
  * `heartbeat` is deliberately unlimited — it beats every 15–30s by design.
+ *
+ * Scope, stated honestly: this gates traffic that comes THROUGH the proxy — the
+ * client's own path. The Edge Functions are guest-capable (`verify_jwt = false`),
+ * so a determined caller can hit them directly and skip this hook. That is the
+ * spec's accepted posture (defend against casual tampering, not a determined
+ * attacker); a durable, path-independent limit (a shared proxy secret, or per-
+ * identity limiting in the function) is a deliberate follow-up.
  *
  * The limit values come from `$lib/config`, never inline here (see rate-limit.ts).
  */

@@ -123,20 +123,20 @@ afterAll(async () => {
 describe('start mints a real, server-clocked play', () => {
 	test('a guest with no session gets a plays row keyed by its guest UUID', async () => {
 		const guestId = guest();
-		const { status, body } = await post<{ token: string; startedAt: string; attemptNo: number }>(
-			'start',
-			{ puzzleDate, guestId }
-		);
+		const { status, body } = await post<{ token: string; startedAt: string }>('start', {
+			puzzleDate,
+			guestId
+		});
 		expect(status).toBe(200);
 		expect(body.token).toMatch(/[0-9a-f-]{36}/);
-		expect(body.attemptNo).toBe(1);
 
-		const rows = await sql<{ guest_id: string; user_id: string | null; started_at: string }[]>`
-      select guest_id, user_id, started_at from public.plays where token = ${body.token}
+		const rows = await sql<{ guest_id: string; user_id: string | null; attempt_no: number }[]>`
+      select guest_id, user_id, attempt_no from public.plays where token = ${body.token}
     `;
 		expect(rows).toHaveLength(1);
 		expect(rows[0].guest_id).toBe(guestId);
 		expect(rows[0].user_id).toBeNull();
+		expect(rows[0].attempt_no).toBe(1);
 	});
 
 	test('one open play per identity per date: a second start returns the same token', async () => {
