@@ -6,12 +6,13 @@
  * proxy is turned away with a 429 before it reaches the Supabase Edge Functions.
  * `heartbeat` is deliberately unlimited — it beats every 15–30s by design.
  *
- * Scope, stated honestly: this gates traffic that comes THROUGH the proxy — the
- * client's own path. The Edge Functions are guest-capable (`verify_jwt = false`),
- * so a determined caller can hit them directly and skip this hook. That is the
- * spec's accepted posture (defend against casual tampering, not a determined
- * attacker); a durable, path-independent limit (a shared proxy secret, or per-
- * identity limiting in the function) is a deliberate follow-up.
+ * Scope: this is a cheap per-IP FIRST PASS on the client's own path. It counts in
+ * per-instance memory, and the Edge Functions are guest-capable (`verify_jwt =
+ * false`) so a direct caller skips this hook — so it is deliberately NOT the
+ * authoritative limit. The durable, path-independent cap is the per-identity limit
+ * enforced inside the Edge Functions themselves (`check_play_rate_limit`), which
+ * a direct call cannot skip and a cold start cannot forget. This hook stays as an
+ * early, no-DB rejection for proxy floods.
  *
  * The limit values come from `$lib/config`, never inline here (see rate-limit.ts).
  */

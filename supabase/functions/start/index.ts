@@ -8,6 +8,7 @@
 
 import { adminClient } from '../_shared/admin.ts';
 import { isUuid } from '../_shared/owner.ts';
+import { enforceRateLimit } from '../_shared/rate-limit.ts';
 import { json, preflight, readJsonBody } from '../_shared/http.ts';
 
 interface StartBody {
@@ -32,6 +33,12 @@ Deno.serve(async (req) => {
 	}
 
 	const admin = adminClient();
+
+	// Per-identity cap, enforced here so a direct call cannot skip it and a cold
+	// start cannot forget it. Numbers come from config via the shared helper.
+	const limited = await enforceRateLimit(admin, 'start', body.guestId);
+	if (limited) return limited;
+
 	const { data, error } = await admin.rpc('start_play', {
 		p_puzzle_date: body.puzzleDate,
 		p_user_id: null,

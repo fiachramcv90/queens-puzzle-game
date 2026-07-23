@@ -28,9 +28,15 @@ export interface RateLimit {
 export const rateLimits = {
 	/** `reveal` — roughly one hint per two seconds, per play. */
 	reveal: { limit: 1, windowMs: 2 * SECOND },
-	/** `start` — per IP. A DB constraint separately allows one open play per identity per date. */
+	/**
+	 * `start` — per identity, enforced durably inside the Edge Function
+	 * (`check_play_rate_limit`), so a direct call cannot skip it and a cold start
+	 * cannot forget it. A DB constraint separately allows one open play per
+	 * identity per date. The proxy hook also applies this as a cheap per-IP first
+	 * pass; the per-identity limit is the authoritative backstop.
+	 */
 	start: { limit: 30, windowMs: HOUR },
-	/** `submit` — per IP. */
+	/** `submit` — per identity, enforced durably in the Edge Function (see `start`). */
 	submit: { limit: 60, windowMs: HOUR }
 } as const satisfies Record<string, RateLimit>;
 
