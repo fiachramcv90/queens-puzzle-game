@@ -9,9 +9,10 @@
  *
  * The window is a simple in-memory fixed window. That is per-instance state, so
  * across several serverless instances the effective limit is looser than the
- * nominal one — acceptable for a casual-tampering backstop whose numbers are
- * admittedly guesses. A shared store (KV/Redis) is the upgrade when the numbers
- * start to matter.
+ * nominal one. That is fine because this is only a cheap FIRST PASS: the
+ * authoritative, durable cap is the per-identity limit enforced inside the Edge
+ * Functions (`check_play_rate_limit`), which no request path can skip and no cold
+ * start can wipe. This hook just turns away obvious proxy floods without a DB hit.
  */
 
 import { rateLimits, type RateLimitName } from '$lib/config';

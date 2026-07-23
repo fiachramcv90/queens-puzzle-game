@@ -19,6 +19,7 @@ import type { Board, MoveLog, RegionMap } from '../_shared/solver.bundle.js';
 import { MOVE_LOG_FORMAT_VERSION } from '../_shared/solver.bundle.js';
 import { adminClient } from '../_shared/admin.ts';
 import { isUuid } from '../_shared/owner.ts';
+import { enforceRateLimit } from '../_shared/rate-limit.ts';
 import { json, preflight, readJsonBody } from '../_shared/http.ts';
 
 interface SubmitBody {
@@ -31,6 +32,8 @@ interface SubmitBody {
 interface LoadedPlay {
 	status: 'ok' | 'unknown' | 'already-submitted' | 'wrong-puzzle';
 	play_id: string | null;
+	owner_user_id: string | null;
+	owner_guest_id: string | null;
 	puzzle_date: string | null;
 	started_at: string | null;
 	last_heartbeat_at: string | null;
@@ -85,6 +88,15 @@ Deno.serve(async (req) => {
 			return json({ error: 'this play was already submitted' }, 409);
 		case 'wrong-puzzle':
 			return json({ error: 'token is for a different puzzle' }, 409);
+	}
+
+	// Per-identity cap on the token's true owner, enforced before the expensive
+	// decision and write. A determined caller reaches the function directly and a
+	// cold start does not reset the count — see _shared/rate-limit.ts.
+	const identity = loaded.owner_user_id ?? loaded.owner_guest_id;
+	if (identity) {
+		const limited = await enforceRateLimit(admin, 'submit', identity);
+		if (limited) return limited;
 	}
 
 	const regionMap = asRegionMap(loaded.region_map as RegionMap | string);
