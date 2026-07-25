@@ -110,6 +110,14 @@ export interface GuestBlob {
 	/** The current in-progress (or just-solved) play, if any. */
 	readonly play?: PersistedPlay;
 	/**
+	 * The Dublin dates this guest has solved a daily on, in `YYYY-MM-DD` — the local
+	 * record a guest's streak is derived from (see `$lib/streak`). A guest only ever
+	 * plays today's daily, so every entry is an eligible in-window solve. It survives
+	 * the merge server-side: once signed in, `recompute_streaks` rebuilds the streak
+	 * from the re-keyed play rows, so this local list is only ever the guest's mirror.
+	 */
+	readonly solvedDates?: string[];
+	/**
 	 * Set once this guest's server-side history has been folded onto a signed-in
 	 * account. Absent or false means the merge is still pending: on the next
 	 * authenticated load the client attempts it (again, if a prior attempt failed or

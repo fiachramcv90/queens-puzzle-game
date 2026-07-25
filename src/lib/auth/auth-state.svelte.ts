@@ -45,6 +45,16 @@ export class AuthState {
 		return () => this.stop?.();
 	}
 
+	/**
+	 * Re-read the profile from the server. Called after a signed-in player records a
+	 * solve so the streak cache the server just advanced is reflected in the UI without
+	 * a page reload. A no-op while a guest (no session to read a profile for).
+	 */
+	async refreshProfile(): Promise<void> {
+		if (!this.session) return;
+		this.profile = await fetchProfile();
+	}
+
 	/** React to a session becoming present or absent. */
 	private async onSession(session: Session | null): Promise<void> {
 		if (!session) {

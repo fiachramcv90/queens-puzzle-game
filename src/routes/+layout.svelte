@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, setContext } from 'svelte';
 	import { browser } from '$app/environment';
 	import favicon from '$lib/assets/favicon.svg';
 	import AuthPanel from '$lib/components/AuthPanel.svelte';
 	import { AuthState } from '$lib/auth/auth-state.svelte';
+	import { AUTH_CONTEXT } from '$lib/auth/context';
 
 	let { children } = $props();
 
@@ -11,6 +12,10 @@
 	// authenticated load after guest play, silently merges the guest's history. It
 	// never gates play — a guest sees an unchanged board.
 	const auth = new AuthState();
+
+	// Share the one auth instance with the page (the streak display reads the profile
+	// through it), rather than threading it as a prop through the slot.
+	setContext(AUTH_CONTEXT, auth);
 
 	onMount(() => {
 		let teardown: (() => void) | undefined;
