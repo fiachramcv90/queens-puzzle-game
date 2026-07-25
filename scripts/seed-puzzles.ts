@@ -27,9 +27,17 @@ const CONNECTION =
 	process.env.SUPABASE_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 
 /**
- * What to seed: a spread of sizes across today and the preceding days. `daysAgo`
- * schedules relative to the Dublin daily so `daysAgo: 0` is always today's board;
- * `seed` fixes the board so the run is reproducible.
+ * What to seed: a spread of sizes across a CONTINUOUS window of dailies. `daysAgo`
+ * schedules relative to the Dublin daily, so `daysAgo: 0` is always today's board; a
+ * NEGATIVE `daysAgo` is a future date (hidden by RLS until it arrives). `seed` fixes
+ * the board so the run is reproducible.
+ *
+ * The window is forward-looking on purpose. A backward-only seed goes stale the moment
+ * a real day passes — today outruns the last scheduled date and the home page falls
+ * back to the latest past daily, which then (correctly) reads as an archive board. So
+ * the window spans a past run for the archive AND a future run for runway, and it is
+ * gap-free so no day between is ever missing. This is the local stand-in for the
+ * production generation pipeline (#32), which keeps the schedule ~90 days ahead.
  */
 interface SeedEntry {
 	readonly daysAgo: number;
@@ -37,14 +45,35 @@ interface SeedEntry {
 	readonly seed: number;
 }
 
-const ENTRIES: readonly SeedEntry[] = [
-	{ daysAgo: 0, size: 8, seed: 1001 },
-	{ daysAgo: 1, size: 7, seed: 1002 },
-	{ daysAgo: 2, size: 9, seed: 1003 },
-	{ daysAgo: 3, size: 8, seed: 1004 },
-	{ daysAgo: 4, size: 10, seed: 1005 },
-	{ daysAgo: 5, size: 7, seed: 1006 }
-];
+/** Days of archive to seed behind today. Override with SEED_PAST_DAYS. */
+const PAST_DAYS = Number(process.env.SEED_PAST_DAYS ?? 21);
+/** Days of runway to seed ahead of today (hidden until each arrives). Override with SEED_FUTURE_DAYS. */
+const FUTURE_DAYS = Number(process.env.SEED_FUTURE_DAYS ?? 14);
+
+/**
+ * A gentle, repeating size ramp across the week (smaller early, larger at the end),
+ * indexed by position in the window so consecutive dailies vary. Sizes stay in the
+ * 7–10 range the generator handles quickly enough for a one-shot seed.
+ */
+const SIZE_RAMP = [7, 7, 8, 8, 9, 9, 10] as const;
+
+/**
+ * The continuous window, newest future date first through the oldest past date. Each
+ * date gets a distinct `seed` (so every board is a distinct puzzle — `puzzle_schedule`
+ * requires a unique puzzle per date), and a size from the ramp.
+ */
+const ENTRIES: readonly SeedEntry[] = Array.from(
+	{ length: PAST_DAYS + FUTURE_DAYS + 1 },
+	(_unused, i): SeedEntry => {
+		const daysAgo = PAST_DAYS - i; // +PAST_DAYS (oldest) … 0 (today) … -FUTURE_DAYS (furthest ahead)
+		return {
+			daysAgo,
+			size: SIZE_RAMP[((i % SIZE_RAMP.length) + SIZE_RAMP.length) % SIZE_RAMP.length],
+			// Unique, stable per date: the offset shifted into a positive, collision-free range.
+			seed: 1000 + (daysAgo + FUTURE_DAYS + 1)
+		};
+	}
+);
 
 /**
  * Ensure a board exists and is scheduled for its date. Idempotent on both: an
@@ -107,7 +136,12 @@ async function main(): Promise<void> {
 		let existed = 0;
 		for (const entry of ENTRIES) {
 			const outcome = await seedEntry(sql, entry);
-			const when = entry.daysAgo === 0 ? 'today' : `today - ${entry.daysAgo}`;
+			const when =
+				entry.daysAgo === 0
+					? 'today'
+					: entry.daysAgo > 0
+						? `today - ${entry.daysAgo}`
+						: `today + ${-entry.daysAgo}`;
 			console.log(`  ${outcome.padEnd(8)} ${entry.size}×${entry.size} for ${when}`);
 			if (outcome === 'inserted') inserted++;
 			else existed++;
