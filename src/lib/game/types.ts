@@ -94,6 +94,38 @@ export interface PersistedPlay {
 }
 
 /**
+ * One completed play as the guest records it locally — the guest's mirror of a
+ * server `plays` row, and the input to the shared history builder ($lib/history).
+ * A record is appended the moment a play is submitted, so a guest's history survives
+ * offline and follows them until the merge folds the equivalent server rows onto
+ * their account.
+ *
+ * `puzzleDate` is which daily this is; `playedDate` is the Dublin date it was
+ * actually played on. They agree for today's daily and disagree for an archive play
+ * — the same two-dates model the server uses to keep an archive solve streak-neutral
+ * and unranked, so no separate "is archive" flag is stored.
+ */
+export interface LocalPlayRecord {
+	/** The daily's Dublin date, `YYYY-MM-DD`. */
+	readonly puzzleDate: string;
+	/** The Dublin date the play was solved on, `YYYY-MM-DD`. */
+	readonly playedDate: string;
+	/** 1 for the first attempt at this daily, incrementing per later attempt. */
+	readonly attemptNo: number;
+	/** Credited time in ms, exactly as the server recorded it. */
+	readonly elapsedMs: number;
+	/** Server-derived mistakes, or null when the solve could not be verified. */
+	readonly mistakes: number | null;
+	/** Hints used (0 until the hints feature ships, #28). */
+	readonly hintsUsed: number;
+	readonly assisted: boolean;
+	readonly stale: boolean;
+	readonly unverified: boolean;
+	/** A later completed attempt at an already-solved daily: practice, no ranking. */
+	readonly replay: boolean;
+}
+
+/**
  * The whole guest blob under one localStorage key. Minted on first play and keyed
  * by a guest UUID; holds prefs, the current in-progress play, and a snapshot of
  * the daily it belongs to.
@@ -117,6 +149,14 @@ export interface GuestBlob {
 	 * from the re-keyed play rows, so this local list is only ever the guest's mirror.
 	 */
 	readonly solvedDates?: string[];
+	/**
+	 * Every daily this guest has completed, one record per submitted play — the local
+	 * source the history view reads from before sign-in. Includes archive plays (whose
+	 * `playedDate` differs from `puzzleDate`). Optional so a blob written before this
+	 * feature still loads (it restores an empty history). Survives the merge server-side
+	 * once the equivalent server rows are re-keyed onto the account.
+	 */
+	readonly plays?: LocalPlayRecord[];
 	/**
 	 * Set once this guest's server-side history has been folded onto a signed-in
 	 * account. Absent or false means the merge is still pending: on the next
