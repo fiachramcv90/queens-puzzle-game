@@ -28,12 +28,19 @@ async function createUser(opts: {
 	meta?: Record<string, unknown>;
 }): Promise<string> {
 	const id = crypto.randomUUID();
+	// raw_user_meta_data must be a real jsonb OBJECT so the seeding trigger's
+	// `->> 'name'` can index it. postgres.js's sql.json() sends a proper json value;
+	// the `${JSON.stringify(x)}::jsonb` idiom used elsewhere in these fixtures stores a
+	// double-encoded jsonb *string* (masked everywhere by defensive JSON.parse), on
+	// which `->> 'name'` returns null — which would send the trigger to the email
+	// fallback and hide the OAuth-name path. This mirrors how scripts/seed-puzzles.ts
+	// writes jsonb.
 	await sql`
     insert into auth.users
       (instance_id, id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     values (
       ${INSTANCE}, ${id}, 'authenticated', 'authenticated', ${opts.email},
-      '{}'::jsonb, ${JSON.stringify(opts.meta ?? {})}::jsonb, now(), now()
+      ${sql.json({})}, ${sql.json(opts.meta ?? {})}, now(), now()
     )
   `;
 	return id;
