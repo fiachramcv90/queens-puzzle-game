@@ -31,13 +31,20 @@ export interface Daily {
 }
 
 /**
- * Lightweight, non-authoritative player preferences. Kept in the same guest blob
- * as the in-progress board. Empty for now — the palette and CVD toggles land in a
- * later ticket — but the shape exists so persistence has one home to grow into.
+ * Lightweight, non-authoritative player preferences. Kept in the same guest blob as
+ * the in-progress board, and mirrored to the profile once signed in so they follow
+ * the player across devices (see `$lib/auth/profile`). Every field is optional: a blob
+ * written before a pref existed still loads, falling back to the base experience. The
+ * palette token set and the region-label toggle are defined by the accessibility
+ * ticket (#24); their names are reserved here so prefs have one home to grow into.
  */
 export interface GuestPrefs {
-	/** Reserved. The palette token set and CVD toggle arrive in a later ticket. */
-	readonly [key: string]: never;
+	/** Named palette token set. Reserved for #24; the base palette until then. */
+	readonly palette?: string;
+	/** Show region labels for colourblind safety. Reserved for #24. */
+	readonly regionLabels?: boolean;
+	/** Auto-place mark (X) on cells a placed queen rules out. */
+	readonly autoMarkX?: boolean;
 }
 
 /**
@@ -102,4 +109,12 @@ export interface GuestBlob {
 	readonly daily?: Daily;
 	/** The current in-progress (or just-solved) play, if any. */
 	readonly play?: PersistedPlay;
+	/**
+	 * Set once this guest's server-side history has been folded onto a signed-in
+	 * account. Absent or false means the merge is still pending: on the next
+	 * authenticated load the client attempts it (again, if a prior attempt failed or
+	 * was offline). The merge itself is idempotent, so this flag is a cost-saver, not
+	 * a correctness gate.
+	 */
+	readonly merged?: boolean;
 }

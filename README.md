@@ -46,11 +46,13 @@ machine and are worthless outside your laptop — but `.env` is gitignored regar
 
 ## Environment variables
 
-| Variable                          | Where it lives                                               |
-| --------------------------------- | ------------------------------------------------------------ |
-| `PUBLIC_SUPABASE_URL`             | Client and server. Public.                                   |
-| `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Client and server. Public by design — RLS protects the data. |
-| `SUPABASE_SECRET_KEY`             | Server only, and a GitHub Actions secret. Never the client.  |
+| Variable                                  | Where it lives                                               |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| `PUBLIC_SUPABASE_URL`                     | Client and server. Public.                                   |
+| `PUBLIC_SUPABASE_PUBLISHABLE_KEY`         | Client and server. Public by design — RLS protects the data. |
+| `SUPABASE_SECRET_KEY`                     | Server only, and a GitHub Actions secret. Never the client.  |
+| `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` | Read by `supabase/config.toml` for Google sign-in. Secret.   |
+| `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`    | Read by `supabase/config.toml` for Google sign-in. Secret.   |
 
 The secret key bypasses RLS completely. Two mechanisms keep it out of the browser bundle, and both
 are load-bearing: it is read only from [`src/lib/server/supabase-env.ts`](src/lib/server/supabase-env.ts),
