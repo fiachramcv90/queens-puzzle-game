@@ -4,8 +4,14 @@ on:
   push:
   pull_request:
 
+# A push event and a pull_request event fire for the same branch under different
+# github.ref values, so keying the group on github.ref alone lets the two runs race —
+# and both call `supabase start`, which binds fixed host ports (54324 et al.), so the
+# second collides on "address already in use". head_ref (set on pull_request) and
+# ref_name (set on push) both resolve to the bare branch name, so the two events share
+# one group and cancel-in-progress supersedes the older run.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
