@@ -13,31 +13,9 @@
  */
 
 import type { PageLoad } from './$types';
-import type { DifficultyTier, RegionMap } from '$lib/solver';
 import type { Daily } from '$lib/game/types';
+import { scheduleRowToDaily, type ScheduleRow } from '$lib/game/daily-load';
 import { createSupabaseClient } from '$lib/supabase/client';
-
-/** The shape the schedule→puzzle join comes back as (no generated types yet). */
-interface ScheduleRow {
-	date: string;
-	puzzles: {
-		id: string;
-		board_size: number;
-		// jsonb, so normally a parsed array — but tolerated as a JSON string too, so
-		// a double-encoded column value can't take the board down. See asRegionMap.
-		region_map: RegionMap | string;
-		tier: DifficultyTier;
-	} | null;
-}
-
-/**
- * The DB→domain boundary for the region map. jsonb should arrive already parsed,
- * but a value stored as a JSON string is parsed here rather than trusted to be an
- * array — the anti-corruption layer that keeps a storage quirk out of the game.
- */
-function asRegionMap(value: RegionMap | string): RegionMap {
-	return typeof value === 'string' ? (JSON.parse(value) as RegionMap) : value;
-}
 
 export const load: PageLoad = async ({ fetch }) => {
 	let daily: Daily | null = null;
@@ -51,15 +29,7 @@ export const load: PageLoad = async ({ fetch }) => {
 			.limit(1)
 			.maybeSingle<ScheduleRow>();
 
-		if (!error && data?.puzzles) {
-			daily = {
-				id: data.puzzles.id,
-				date: data.date,
-				boardSize: data.puzzles.board_size,
-				tier: data.puzzles.tier,
-				regionMap: asRegionMap(data.puzzles.region_map)
-			};
-		}
+		if (!error && data) daily = scheduleRowToDaily(data);
 	} catch {
 		daily = null;
 	}

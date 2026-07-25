@@ -1,178 +1,25 @@
 <script lang="ts">
-	import { getContext, onMount } from 'svelte';
+	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import type { PageData } from './$types';
-	import type { Cell } from '$lib/solver';
 	import type { Daily } from '$lib/game/types';
-	import { GameState } from '$lib/game/game-state.svelte';
-	import { getOrCreateGuestId, loadBlob, saveBlob } from '$lib/game/persistence';
-	import { sendHeartbeat, startPlay, submitPlay } from '$lib/game/play-client';
-	import { heartbeat } from '$lib/config';
-	import Board from '$lib/components/Board.svelte';
-	import StreakBadge from '$lib/components/StreakBadge.svelte';
-	import { AUTH_CONTEXT, type AuthContext } from '$lib/auth/context';
-	import { computeStreak, dublinToday, viewStreak } from '$lib/streak/streak';
+	import { loadBlob } from '$lib/game/persistence';
+	import DailyPlay from '$lib/components/DailyPlay.svelte';
 
 	let { data }: { data: PageData } = $props();
 
-	// The shared auth instance the layout published. A signed-in player's streak is the
-	// server's (their profile cache); a guest's is derived from local solved dates below.
-	const auth = getContext<AuthContext>(AUTH_CONTEXT);
-
-	/** The Dublin dates this guest has solved, restored from the blob and appended on each solve. */
-	let solvedDates = $state<string[]>([]);
-
-	// The streak to show: the profile's server-maintained cache once signed in (a Profile
-	// carries the three StreakCache fields directly), else the guest's locally-derived
-	// one. Both are read through the same time-aware `viewStreak`, so "held while live, 0
-	// once a day elapses, at-risk while pending" is one rule.
-	const streak = $derived(
-		viewStreak(auth?.signedIn && auth.profile ? auth.profile : computeStreak(solvedDates))
-	);
-
-	let game = $state<GameState | null>(null);
+	/** Today's daily, resolved from the server load or (offline) the cached blob. */
+	let daily = $state<Daily | null>(null);
 	/** True when neither the load nor the cache could produce a daily. */
 	let unavailable = $state(false);
-	/** A submit is in flight — guards the solve effect against firing twice. */
-	let submitting = $state(false);
-	/** The submit failed (offline, or the server rejected). The board stays solved. */
-	let submitFailed = $state(false);
-
-	// Set once in onMount, then read by the persistence effect after `game` exists.
-	let storage: Storage | null = null;
-	let guestId = '';
-	let daily: Daily | null = null;
 
 	onMount(() => {
-		storage = window.localStorage;
-		guestId = getOrCreateGuestId(storage);
-		const blob = loadBlob(storage);
-
 		// Prefer the freshly loaded daily; fall back to the cached one so a returning
 		// player whose network is down still gets their board.
+		const blob = loadBlob(window.localStorage);
 		daily = data.daily ?? blob?.daily ?? null;
-		if (!daily) {
-			unavailable = true;
-			return;
-		}
-
-		game = new GameState(daily, blob?.play);
-
-		// Restore the guest's solved-date history, and make sure a play restored already
-		// solved is counted — a solve recorded before this list existed, or one whose
-		// append effect never ran, still belongs to its day. Only today's live daily is
-		// eligible: a fallback to a past or cached daily is streak-neutral, the same
-		// derived rule (puzzle_date = dublin_date(started_at)) the server applies.
-		solvedDates = blob?.solvedDates ?? [];
-		if (game.result && daily.date === dublinToday() && !solvedDates.includes(daily.date)) {
-			solvedDates = [...solvedDates, daily.date];
-		}
-
-		// Anchor the play on the server unless it is already a completed one. `start`
-		// is idempotent per identity and date, so a resumed play gets back the same
-		// token and the same started_at — a refresh cannot reset the timer.
-		if (!game.result) {
-			startPlay(daily.date, guestId)
-				.then((started) => {
-					if (!game) return;
-					game.token = started.token;
-					game.startedAt = Date.parse(started.startedAt);
-				})
-				.catch(() => {
-					// Offline or rate-limited: keep playing on the display-only timer.
-					// The solve simply cannot be submitted until `start` succeeds.
-				});
-		}
-
-		// Advance the display-only timer once a second, until the board is solved.
-		const timer = setInterval(() => {
-			if (game && game.solvedElapsedMs === undefined) game.nowMs = Date.now();
-			else clearInterval(timer);
-		}, 1000);
-
-		// Beat while the tab is visible and the play is live — liveness only, never
-		// time. Stops once solved.
-		const beat = setInterval(() => {
-			if (
-				game?.token &&
-				game.solvedElapsedMs === undefined &&
-				document.visibilityState === 'visible'
-			) {
-				sendHeartbeat(game.token).catch(() => {});
-			}
-		}, heartbeat.intervalMs);
-
-		return () => {
-			clearInterval(timer);
-			clearInterval(beat);
-		};
+		if (!daily) unavailable = true;
 	});
-
-	// Submit the instant the board is solved, once, provided the play was anchored
-	// on the server. The server owns the credited time and the accept/reject call;
-	// its result replaces the display timer.
-	$effect(() => {
-		if (!game || !daily) return;
-		if (!game.solved || game.result || !game.token || submitting) return;
-		submitting = true;
-		submitFailed = false;
-		const g = game;
-		const token = game.token;
-		const puzzleId = daily.id;
-		const solvedDate = daily.date;
-		submitPlay(token, puzzleId, g.board, g.moveLog())
-			.then((result) => {
-				g.result = result;
-				// Count this day toward the guest's local streak, but only for today's live
-				// daily — an archived or cached-fallback board is streak-neutral, matching the
-				// server's derived eligibility. Deduped: a replay solves the same date. For a
-				// signed-in player the server advanced their profile cache in the same
-				// transaction, so re-read it to reflect the new streak.
-				if (solvedDate === dublinToday() && !solvedDates.includes(solvedDate)) {
-					solvedDates = [...solvedDates, solvedDate];
-				}
-				if (auth?.signedIn) void auth.refreshProfile();
-			})
-			.catch(() => {
-				submitFailed = true;
-			})
-			.finally(() => {
-				submitting = false;
-			});
-	});
-
-	// Persist on every change to the board, the timer's frozen result, the token or
-	// the server result, so a refresh or a closed tab restores exactly where the
-	// player left off. Created at init (never inside onMount) and gated until the
-	// game exists.
-	$effect(() => {
-		if (!game || !storage || !daily) return;
-		// Touch the reactive fields the snapshot depends on.
-		void game.board;
-		void game.solvedElapsedMs;
-		void game.startedAt;
-		void game.token;
-		void game.result;
-		void solvedDates;
-		// Spread the existing blob so fields written elsewhere (prefs synced down, the
-		// merged flag) survive a play write; only the play, its daily and the solved-date
-		// history are ours to set here.
-		const existing = loadBlob(storage);
-		saveBlob(storage, {
-			...existing,
-			guestId,
-			prefs: existing?.prefs ?? {},
-			daily,
-			play: game.snapshot(),
-			solvedDates
-		});
-	});
-
-	function formatTime(ms: number): string {
-		const total = Math.floor(ms / 1000);
-		const minutes = Math.floor(total / 60);
-		const seconds = total % 60;
-		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-	}
 </script>
 
 <svelte:head>
@@ -183,72 +30,13 @@
 <main>
 	<h1>Queens</h1>
 
-	{#if game}
-		<StreakBadge view={streak} />
-		<div class="meta">
-			<span class="tier">{game.size}×{game.size} · {game.tier}</span>
-			<!-- Once the server has recorded the solve, the timer shows its CREDITED
-			     time — the number that counts. Before then it is the display-only
-			     running clock. -->
-			<span class="timer" class:solved={game.solved} aria-live="off"
-				>{formatTime(game.result ? game.result.elapsedMs : game.elapsedMs)}</span
-			>
-		</div>
+	<nav class="links">
+		<a href={resolve('/history')}>History</a>
+		<a href={resolve('/archive')}>Archive</a>
+	</nav>
 
-		<div
-			class="board-wrap"
-			style={`--cell-size: min(2.75rem, calc((100vw - 2.5rem) / ${game.size}))`}
-		>
-			<Board
-				regionMap={game.regionMap}
-				board={game.board}
-				conflicts={game.conflicts}
-				onTap={(row, col) => game?.tap(row, col)}
-				onToggleX={(row, col) => game?.toggleX(row, col)}
-				onSweep={(cells: readonly Cell[]) => game?.sweep(cells)}
-			/>
-		</div>
-
-		{#if game.result}
-			<!-- The result screen: time and mistakes exactly as the server recorded
-			     them. Flags qualify the solve without hiding it — a stale or replay
-			     solve still shows, it just carries its badge. -->
-			<div class="result" class:won={true}>
-				<p class="result-headline">✓ Solved in {formatTime(game.result.elapsedMs)}</p>
-				<p class="result-detail">
-					{#if game.result.mistakes === null}
-						Mistakes not verified
-					{:else}
-						{game.result.mistakes}
-						{game.result.mistakes === 1 ? 'mistake' : 'mistakes'}
-					{/if}
-				</p>
-				{#if game.result.replay}
-					<p class="badge">Replay — practice, not ranked</p>
-				{/if}
-				{#if game.result.stale}
-					<p class="badge">Idle too long — counts, but out of ranking</p>
-				{/if}
-				{#if game.result.unverified}
-					<p class="badge">Solve accepted but not verified</p>
-				{/if}
-			</div>
-		{:else if game.solved}
-			<p class="status won">
-				{#if submitting}
-					✓ Solved — recording…
-				{:else if submitFailed}
-					✓ Solved — couldn't reach the server to record it. Reconnect and refresh.
-				{:else}
-					✓ Solved
-				{/if}
-			</p>
-		{:else}
-			<p class="status">{game.queenCount}/{game.size} queens placed</p>
-		{/if}
-		<p class="hint">
-			Tap to cycle X → queen. Drag across empty cells to sweep X's. Right-click for a quick X.
-		</p>
+	{#if daily}
+		<DailyPlay {daily} />
 	{:else if unavailable}
 		<p>
 			One queen per row, per column and per region — and no two queens touching, even diagonally.
@@ -278,96 +66,23 @@
 
 	h1 {
 		font-size: 2.25rem;
-		margin: 0 0 1rem;
+		margin: 0 0 0.5rem;
 	}
 
-	.meta {
+	.links {
 		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
 		gap: 1rem;
-		margin-bottom: 0.75rem;
-	}
-
-	.tier {
-		font-weight: 600;
-		font-size: 1.05rem;
-	}
-
-	.timer {
-		font-variant-numeric: tabular-nums;
-		font-size: 1.05rem;
-		color: #555;
-	}
-	.timer.solved {
-		color: #0f6e56;
-		font-weight: 600;
-	}
-
-	.board-wrap {
-		margin: 0.25rem 0 1rem;
-	}
-
-	.status {
-		font-weight: 500;
-		margin: 0.5rem 0 0.25rem;
-	}
-	.status.won {
-		color: #0f6e56;
-	}
-
-	.result {
-		margin: 0.5rem 0 0.25rem;
-	}
-	.result-headline {
-		font-weight: 700;
-		font-size: 1.15rem;
-		color: #0f6e56;
-		margin: 0 0 0.15rem;
-	}
-	.result-detail {
-		margin: 0;
-		color: #555;
-	}
-	.badge {
-		display: inline-block;
-		margin: 0.4rem 0 0;
-		padding: 0.15rem 0.5rem;
-		border-radius: 0.5rem;
-		background: #f0ede6;
-		color: #6b5f3f;
-		font-size: 0.8rem;
-	}
-
-	.hint {
-		color: #888;
-		font-size: 0.85rem;
-		margin: 0.25rem 0 0;
+		margin-bottom: 1rem;
+		font-size: 0.95rem;
 	}
 
 	.placeholder {
 		color: #666;
 	}
 
-	/* The board is a light-surfaced card (its region fills are always light
-	   pastels), so the cage and grid lines stay dark in both themes — inverting
-	   them would make light-on-light lines vanish. Only the page chrome adapts. */
 	@media (prefers-color-scheme: dark) {
 		main {
 			color: #e8e8e8;
-		}
-		.timer {
-			color: #aaa;
-		}
-		.hint {
-			color: #999;
-		}
-		.result-detail {
-			color: #aaa;
-		}
-		.badge {
-			background: #2a2822;
-			color: #cdbb8a;
 		}
 	}
 </style>
