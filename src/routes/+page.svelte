@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { getContext, onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import type { Cell } from '$lib/solver';
 	import type { Daily } from '$lib/game/types';
@@ -8,8 +8,26 @@
 	import { sendHeartbeat, startPlay, submitPlay } from '$lib/game/play-client';
 	import { heartbeat } from '$lib/config';
 	import Board from '$lib/components/Board.svelte';
+	import StreakBadge from '$lib/components/StreakBadge.svelte';
+	import { AUTH_CONTEXT, type AuthContext } from '$lib/auth/context';
+	import { computeStreak, dublinToday, viewStreak } from '$lib/streak/streak';
 
 	let { data }: { data: PageData } = $props();
+
+	// The shared auth instance the layout published. A signed-in player's streak is the
+	// server's (their profile cache); a guest's is derived from local solved dates below.
+	const auth = getContext<AuthContext>(AUTH_CONTEXT);
+
+	/** The Dublin dates this guest has solved, restored from the blob and appended on each solve. */
+	let solvedDates = $state<string[]>([]);
+
+	// The streak to show: the profile's server-maintained cache once signed in (a Profile
+	// carries the three StreakCache fields directly), else the guest's locally-derived
+	// one. Both are read through the same time-aware `viewStreak`, so "held while live, 0
+	// once a day elapses, at-risk while pending" is one rule.
+	const streak = $derived(
+		viewStreak(auth?.signedIn && auth.profile ? auth.profile : computeStreak(solvedDates))
+	);
 
 	let game = $state<GameState | null>(null);
 	/** True when neither the load nor the cache could produce a daily. */
@@ -38,6 +56,16 @@
 		}
 
 		game = new GameState(daily, blob?.play);
+
+		// Restore the guest's solved-date history, and make sure a play restored already
+		// solved is counted — a solve recorded before this list existed, or one whose
+		// append effect never ran, still belongs to its day. Only today's live daily is
+		// eligible: a fallback to a past or cached daily is streak-neutral, the same
+		// derived rule (puzzle_date = dublin_date(started_at)) the server applies.
+		solvedDates = blob?.solvedDates ?? [];
+		if (game.result && daily.date === dublinToday() && !solvedDates.includes(daily.date)) {
+			solvedDates = [...solvedDates, daily.date];
+		}
 
 		// Anchor the play on the server unless it is already a completed one. `start`
 		// is idempotent per identity and date, so a resumed play gets back the same
@@ -90,9 +118,19 @@
 		const g = game;
 		const token = game.token;
 		const puzzleId = daily.id;
+		const solvedDate = daily.date;
 		submitPlay(token, puzzleId, g.board, g.moveLog())
 			.then((result) => {
 				g.result = result;
+				// Count this day toward the guest's local streak, but only for today's live
+				// daily — an archived or cached-fallback board is streak-neutral, matching the
+				// server's derived eligibility. Deduped: a replay solves the same date. For a
+				// signed-in player the server advanced their profile cache in the same
+				// transaction, so re-read it to reflect the new streak.
+				if (solvedDate === dublinToday() && !solvedDates.includes(solvedDate)) {
+					solvedDates = [...solvedDates, solvedDate];
+				}
+				if (auth?.signedIn) void auth.refreshProfile();
 			})
 			.catch(() => {
 				submitFailed = true;
@@ -114,7 +152,19 @@
 		void game.startedAt;
 		void game.token;
 		void game.result;
-		saveBlob(storage, { guestId, prefs: {}, daily, play: game.snapshot() });
+		void solvedDates;
+		// Spread the existing blob so fields written elsewhere (prefs synced down, the
+		// merged flag) survive a play write; only the play, its daily and the solved-date
+		// history are ours to set here.
+		const existing = loadBlob(storage);
+		saveBlob(storage, {
+			...existing,
+			guestId,
+			prefs: existing?.prefs ?? {},
+			daily,
+			play: game.snapshot(),
+			solvedDates
+		});
 	});
 
 	function formatTime(ms: number): string {
@@ -134,6 +184,7 @@
 	<h1>Queens</h1>
 
 	{#if game}
+		<StreakBadge view={streak} />
 		<div class="meta">
 			<span class="tier">{game.size}×{game.size} · {game.tier}</span>
 			<!-- Once the server has recorded the solve, the timer shows its CREDITED
