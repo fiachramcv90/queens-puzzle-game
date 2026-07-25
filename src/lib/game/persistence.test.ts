@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { StorageLike } from './persistence';
-import { loadBlob, saveBlob, getOrCreateGuestId, GUEST_BLOB_KEY } from './persistence';
+import { loadBlob, saveBlob, getOrCreateGuestId, writePrefs, GUEST_BLOB_KEY } from './persistence';
 import { createEmptyBoard, setCell } from './board';
 
 /** A minimal in-memory localStorage stand-in for the tests. */
@@ -64,6 +64,33 @@ describe('loadBlob / saveBlob', () => {
 	it('survives a corrupt blob by returning null rather than throwing', () => {
 		const storage = memoryStorage();
 		storage.setItem(GUEST_BLOB_KEY, '{ not json');
+		expect(loadBlob(storage)).toBeNull();
+	});
+});
+
+describe('writePrefs — pulling authoritative profile prefs down onto the device', () => {
+	it('merges prefs into an existing blob, leaving the play untouched', () => {
+		const storage = memoryStorage();
+		saveBlob(storage, {
+			guestId: 'guest-1',
+			prefs: { autoMarkX: true },
+			play: { puzzleId: 'p1', board: [], startedAt: 1000 }
+		});
+
+		writePrefs(storage, { palette: 'high-contrast', regionLabels: true, autoMarkX: false });
+
+		const after = loadBlob(storage);
+		expect(after?.prefs).toEqual({
+			palette: 'high-contrast',
+			regionLabels: true,
+			autoMarkX: false
+		});
+		expect(after?.play?.startedAt).toBe(1000); // the in-progress play is not disturbed
+	});
+
+	it('is a no-op when there is no blob to attach prefs to', () => {
+		const storage = memoryStorage();
+		writePrefs(storage, { palette: 'high-contrast' });
 		expect(loadBlob(storage)).toBeNull();
 	});
 });

@@ -20,7 +20,7 @@ import type { RequestHandler } from './$types';
 import { publicSupabaseEnv } from '$lib/supabase/env';
 
 /** The Edge Functions this proxy is willing to forward to. */
-const ACTIONS = new Set(['start', 'heartbeat', 'submit']);
+const ACTIONS = new Set(['start', 'heartbeat', 'submit', 'merge']);
 
 export const POST: RequestHandler = async ({ params, request, fetch }) => {
 	if (!ACTIONS.has(params.action)) {
@@ -30,12 +30,21 @@ export const POST: RequestHandler = async ({ params, request, fetch }) => {
 	const { url, publishableKey } = publicSupabaseEnv();
 	const body = await request.text();
 
+	// `merge` runs for a signed-in user only (verify_jwt), so its true session token
+	// must reach the Edge Function — that is the identity the merge is keyed to. The
+	// guest-capable play actions carry no session, so they route on the publishable
+	// key alone. apikey stays the publishable key throughout: it is only how the
+	// Supabase gateway routes the call.
+	const clientAuth = request.headers.get('authorization');
+	const authorization =
+		params.action === 'merge' && clientAuth ? clientAuth : `Bearer ${publishableKey}`;
+
 	const upstream = await fetch(`${url}/functions/v1/${params.action}`, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
 			apikey: publishableKey,
-			authorization: `Bearer ${publishableKey}`
+			authorization
 		},
 		body
 	});

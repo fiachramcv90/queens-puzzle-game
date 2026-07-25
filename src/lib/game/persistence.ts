@@ -8,7 +8,7 @@
  * round-trip is testable with an in-memory stand-in and no jsdom.
  */
 
-import type { GuestBlob } from './types';
+import type { GuestBlob, GuestPrefs } from './types';
 
 /** The one localStorage key the whole guest blob lives under. */
 export const GUEST_BLOB_KEY = 'queens:guest:v1';
@@ -51,4 +51,16 @@ export function getOrCreateGuestId(storage: StorageLike): string {
 	const guestId = crypto.randomUUID();
 	saveBlob(storage, { guestId, prefs: {} });
 	return guestId;
+}
+
+/**
+ * Merge prefs into the local blob, leaving everything else untouched. Used to pull a
+ * signed-in player's authoritative profile prefs down onto this device, so palette
+ * and label settings follow them across devices. A no-op when no blob exists yet:
+ * there is nothing local to attach prefs to until the player has a guest identity.
+ */
+export function writePrefs(storage: StorageLike, prefs: GuestPrefs): void {
+	const blob = loadBlob(storage);
+	if (!blob) return;
+	saveBlob(storage, { ...blob, prefs: { ...blob.prefs, ...prefs } });
 }
