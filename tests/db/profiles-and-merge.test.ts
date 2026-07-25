@@ -23,10 +23,7 @@ const PUZZLE_ID = '77777777-0000-0000-0000-000000000025';
 const INSTANCE = '00000000-0000-0000-0000-000000000000';
 
 /** Insert a minimal auth user (the trigger seeds its profile). Returns the id. */
-async function createUser(opts: {
-	email: string;
-	meta?: Record<string, unknown>;
-}): Promise<string> {
+async function createUser(opts: { email: string; meta?: Record<string, string> }): Promise<string> {
 	const id = crypto.randomUUID();
 	// raw_user_meta_data must be a real jsonb OBJECT so the seeding trigger's
 	// `->> 'name'` can index it. postgres.js's sql.json() sends a proper json value;
