@@ -1,0 +1,63 @@
+name: Seed production dailies
+
+# Manually reseed the production schedule with a continuous, forward-looking window
+# of dailies. This is the interim stand-in for the generation pipeline cron (#32):
+# run it whenever "today" has outrun the scheduled dates (the home page falls back to
+# an archive board) to fill the gap and restore runway.
+#
+# Runnable from a phone: GitHub mobile app / web → Actions → this workflow → "Run
+# workflow". No terminal needed.
+#
+# One-time setup: add a repository secret named SUPABASE_DB_URL
+# (Settings → Secrets and variables → Actions) set to the production Postgres
+# connection string — Supabase dashboard → Project Settings → Database → Connection
+# string → URI (it embeds the password). The seed is idempotent: it only inserts
+# missing puzzles and schedule rows, never updates or deletes, so re-running is safe.
+
+on:
+  workflow_dispatch:
+    inputs:
+      past_days:
+        description: 'Days of archive to seed behind today'
+        required: false
+        default: '21'
+      future_days:
+        description: 'Days of runway to seed ahead of today'
+        required: false
+        default: '14'
+
+# Never let two reseeds race against the same database.
+concurrency:
+  group: seed-production
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: Seed the production schedule
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check the database secret is configured
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. Add it under Settings → Secrets and variables → Actions (see this workflow's header for where to find the value)."
+            exit 1
+          fi
+
+      - name: Seed dailies
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SEED_PAST_DAYS: ${{ github.event.inputs.past_days }}
+          SEED_FUTURE_DAYS: ${{ github.event.inputs.future_days }}
+        run: npm run seed
