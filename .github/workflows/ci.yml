@@ -68,9 +68,14 @@ jobs:
       # real policy engine and the real Edge Functions, so bring up a local
       # Supabase (which also serves the functions) and run them against it — never
       # a mock.
+      # Pin a concrete CLI version rather than `latest`: resolving "latest" hits the
+      # GitHub releases API unauthenticated, which intermittently rate-limits the
+      # runner ("Failed to resolve latest Supabase CLI release: rate limit exceeded")
+      # and fails the job before the stack even starts. A pinned tag builds the
+      # download URL directly and skips that lookup. Bump deliberately.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.109.1
 
       - run: supabase start
 
