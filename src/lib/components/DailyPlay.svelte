@@ -270,7 +270,8 @@
 		<p class="status">{game.queenCount}/{game.size} queens placed</p>
 	{/if}
 	<p class="hint">
-		Tap to cycle X → queen. Drag across empty cells to sweep X's. Right-click for a quick X.
+		Tap to cycle X → queen. Drag across empty cells to sweep X's. Right-click for a quick X. Or use
+		the keyboard: arrow keys to move, <kbd>Space</kbd> to cycle, <kbd>X</kbd> to mark.
 	</p>
 {/if}
 
@@ -353,5 +354,14 @@
 		color: var(--text-muted);
 		font-size: var(--text-sm);
 		margin: 0.25rem 0 0;
+	}
+
+	.hint kbd {
+		font: inherit;
+		font-size: 0.95em;
+		padding: 0.05rem 0.3rem;
+		border: 1px solid var(--border);
+		border-radius: 0.25rem;
+		background: var(--surface);
 	}
 </style>

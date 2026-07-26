@@ -10,6 +10,50 @@
 
 import type { Board, Cell, CellState } from '$lib/solver';
 
+/**
+ * Where keyboard focus lands after a navigation key, or `null` when the key is not
+ * one this grid handles (so the component can leave the event alone and let the
+ * browser do whatever it would normally do).
+ *
+ * Kept here beside the tap and sweep rules, and pure, for the same reason they are:
+ * the component should wire events to rules, not contain them. Movement CLAMPS at
+ * the edges rather than wrapping — on a board where a row and a column each hold
+ * exactly one queen, wrapping from the last column to the first row would move the
+ * player across a boundary that matters to the puzzle, with no visual cue.
+ */
+export function nextFocus(
+	current: Cell,
+	key: string,
+	size: number,
+	options: { readonly ctrlKey?: boolean } = {}
+): Cell | null {
+	const clamp = (n: number) => Math.max(0, Math.min(size - 1, n));
+	const { row, col } = current;
+
+	switch (key) {
+		case 'ArrowUp':
+			return { row: clamp(row - 1), col };
+		case 'ArrowDown':
+			return { row: clamp(row + 1), col };
+		case 'ArrowLeft':
+			return { row, col: clamp(col - 1) };
+		case 'ArrowRight':
+			return { row, col: clamp(col + 1) };
+		// Home/End work along the row, as in a spreadsheet; with Ctrl they jump to
+		// the board's first and last cell.
+		case 'Home':
+			return options.ctrlKey ? { row: 0, col: 0 } : { row, col: 0 };
+		case 'End':
+			return options.ctrlKey ? { row: size - 1, col: size - 1 } : { row, col: size - 1 };
+		case 'PageUp':
+			return { row: 0, col };
+		case 'PageDown':
+			return { row: size - 1, col };
+		default:
+			return null;
+	}
+}
+
 /** A fresh N×N board with every cell `empty`. */
 export function createEmptyBoard(size: number): Board {
 	return Array.from({ length: size }, () => Array.from({ length: size }, (): CellState => 'empty'));

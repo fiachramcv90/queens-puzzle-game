@@ -127,7 +127,11 @@
 				required
 			/>
 			<div class="actions">
-				<button class="btn btn-primary" type="submit" disabled={busy || !isConfirmableDisplayName(name)}>
+				<button
+					class="btn btn-primary"
+					type="submit"
+					disabled={busy || !isConfirmableDisplayName(name)}
+				>
 					{busy ? 'Saving…' : 'Use this name'}
 				</button>
 				<button class="btn" type="button" onclick={() => (dismissed = true)} disabled={busy}>

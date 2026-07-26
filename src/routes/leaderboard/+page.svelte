@@ -139,8 +139,11 @@
 	</ol>
 
 	<nav class="paging" aria-label="Board pages">
-		<button class="btn btn-sm" type="button" disabled={page === 0} onclick={() => loadPage(page - 1)}
-			>Previous</button
+		<button
+			class="btn btn-sm"
+			type="button"
+			disabled={page === 0}
+			onclick={() => loadPage(page - 1)}>Previous</button
 		>
 		<span class="page">Page {page + 1}</span>
 		<button class="btn btn-sm" type="button" disabled={!hasNext} onclick={() => loadPage(page + 1)}
