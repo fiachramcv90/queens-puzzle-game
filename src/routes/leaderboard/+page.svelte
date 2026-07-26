@@ -12,6 +12,7 @@
 		type LeaderboardEntry,
 		type OwnStanding
 	} from '$lib/leaderboard/leaderboard';
+	import NameConfirm from '$lib/components/NameConfirm.svelte';
 
 	const auth = getContext<AuthContext>(AUTH_CONTEXT);
 	const today = dublinToday();
@@ -84,6 +85,11 @@
 </svelte:head>
 
 <h1>Leaderboard</h1>
+
+<!-- Opening the board is a SOCIAL action, one of the two the one-time name confirm fires
+     on (friends, #30, is the other and mounts this same component with the same context).
+     Whether it actually appears is the component's question to ask, not this page's. -->
+<NameConfirm {auth} context="social" />
 
 <p class="intro">
 	Today's daily, ranked by solve time — ties break by fewest mistakes, then earliest submission.

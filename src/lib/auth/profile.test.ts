@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { shouldPromptNameConfirm, profileToPrefs, prefsToColumns, type Profile } from './profile';
+import {
+	shouldPromptNameConfirm,
+	isConfirmableDisplayName,
+	profileToPrefs,
+	prefsToColumns,
+	type Profile
+} from './profile';
 
 function profile(overrides: Partial<Profile> = {}): Profile {
 	return {
@@ -32,6 +38,22 @@ describe('shouldPromptNameConfirm — the one-time confirm gate', () => {
 
 	test('a guest (no profile) is never prompted', () => {
 		expect(shouldPromptNameConfirm(null, 'social')).toBe(false);
+	});
+});
+
+describe('isConfirmableDisplayName — what the confirm may be submitted with', () => {
+	test('accepts a name with visible characters', () => {
+		expect(isConfirmableDisplayName('Sam')).toBe(true);
+	});
+
+	test('accepts a name that only needs trimming', () => {
+		expect(isConfirmableDisplayName('  Sam  ')).toBe(true);
+	});
+
+	test('rejects empty and whitespace-only names, which display_name must never hold', () => {
+		expect(isConfirmableDisplayName('')).toBe(false);
+		expect(isConfirmableDisplayName('   ')).toBe(false);
+		expect(isConfirmableDisplayName('\t\n')).toBe(false);
 	});
 });
 
