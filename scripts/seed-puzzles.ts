@@ -130,7 +130,13 @@ async function seedEntry(sql: postgres.Sql, entry: SeedEntry): Promise<'inserted
 }
 
 async function main(): Promise<void> {
-	const sql = postgres(CONNECTION, { max: 1, onnotice: () => {} });
+	// `prepare: false` so the script works through Supabase's transaction-mode pooler
+	// (Supavisor, port 6543) as well as a direct or session-mode connection — the
+	// transaction pooler rejects prepared statements. It is required from CI: a GitHub
+	// Actions runner has no IPv6, and the DIRECT Supabase host is IPv6-only, so the
+	// SUPABASE_DB_URL secret must be a POOLER connection string (…pooler.supabase.com),
+	// which this option keeps compatible whichever pooler mode is chosen.
+	const sql = postgres(CONNECTION, { max: 1, prepare: false, onnotice: () => {} });
 	try {
 		let inserted = 0;
 		let existed = 0;
