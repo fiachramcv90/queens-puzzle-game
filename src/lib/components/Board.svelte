@@ -2,9 +2,19 @@
   The daily board: a legible line drawing first, colour second.
 
   Every region boundary is drawn as an always-on heavy "cage" outline (the
-  Killer-Sudoku primitive), so the board reads with all colour removed. The pastel
-  fill sits on top purely as the at-a-glance fast path. This is the region
-  rendering for everyone — there is no toggle.
+  Killer-Sudoku primitive), so the board reads with all colour removed. This is the
+  region rendering for everyone and it takes NO PROP: there is deliberately no way to
+  turn it off, because it is the structural guarantee the accessible board rests on.
+
+  The fill sits on top purely as the at-a-glance fast path, and it is the only thing
+  the palette prop changes. This component holds no colour of its own — fills and ink
+  arrive in the `palette` token set, and the line-drawing tokens (--cage-*, --grid-*,
+  --conflict-ring) come from the page shell — so a new palette is a token file rather
+  than an edit here.
+
+  `regionLabels` draws the per-region letter, the last-resort identifier for a viewer
+  for whom even a CVD palette collapses. Whether it may be on at all is decided by
+  `resolveBoardPrefs` in $lib/game/palette, not here.
 
   Interaction is wired to the pure board rules in $lib/game/board via callbacks:
     - tap a cell to cycle empty → X → queen → empty
@@ -18,18 +28,23 @@
 	import type { Board, Cell, RegionMap } from '$lib/solver';
 	import { isSweepable } from '$lib/game/board';
 	import { isConflict } from '$lib/game/conflicts';
-	import { regionColor } from '$lib/game/palette';
+	import { regionColor, regionLabel, type Palette } from '$lib/game/palette';
 
 	interface Props {
 		regionMap: RegionMap;
 		board: Board;
 		conflicts: ReadonlySet<string>;
+		/** The token set the region fills are drawn from. Fills only — never the borders. */
+		palette: Palette;
+		/** Draw the per-region letter on every cell. */
+		regionLabels: boolean;
 		onTap: (row: number, col: number) => void;
 		onToggleX: (row: number, col: number) => void;
 		onSweep: (cells: readonly Cell[]) => void;
 	}
 
-	let { regionMap, board, conflicts, onTap, onToggleX, onSweep }: Props = $props();
+	let { regionMap, board, conflicts, palette, regionLabels, onTap, onToggleX, onSweep }: Props =
+		$props();
 
 	const size = $derived(board.length);
 
@@ -127,7 +142,8 @@
 >
 	{#each board as rowCells, row (row)}
 		{#each rowCells as state, col (col)}
-			{@const color = regionColor(regionMap[row][col])}
+			{@const region = regionMap[row][col]}
+			{@const color = regionColor(palette, region)}
 			{@const ringed = state === 'queen' && isConflict(conflicts, row, col)}
 			<div
 				class="cell"
@@ -138,8 +154,13 @@
 				data-col={col}
 				style:background={color.fill}
 				style:color={color.ink}
-				aria-label={`row ${row + 1}, column ${col + 1}: ${state}`}
+				aria-label={`row ${row + 1}, column ${col + 1}, region ${regionLabel(region)}: ${state}`}
 			>
+				{#if regionLabels}
+					<!-- aria-hidden: the region is already named in the cell's own label, so
+					     announcing the letter again would double it up for a screen reader. -->
+					<span class="region-label" aria-hidden="true">{regionLabel(region)}</span>
+				{/if}
 				{#if state === 'queen'}
 					<svg class="glyph queen" viewBox="0 0 24 24" aria-hidden="true">
 						<path
@@ -190,6 +211,7 @@
 	.cell {
 		width: var(--cell-size);
 		height: var(--cell-size);
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -212,6 +234,19 @@
 	/* The free-baseline conflict signal: a subtle red inset ring, not a fill. */
 	.cell.ringed {
 		box-shadow: inset 0 0 0 3px var(--conflict-ring);
+	}
+
+	/* The per-region letter: tucked into the corner, in the region's own ink, so it
+	   identifies the region without competing with the queen or mark (X) glyph. */
+	.region-label {
+		position: absolute;
+		top: 1px;
+		left: 3px;
+		font-size: calc(var(--cell-size) * 0.3);
+		font-weight: 700;
+		line-height: 1;
+		opacity: 0.75;
+		pointer-events: none;
 	}
 
 	.glyph {

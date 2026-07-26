@@ -1,14 +1,17 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
 	import type { Cell } from '$lib/solver';
-	import type { Daily } from '$lib/game/types';
+	import type { Daily, GuestPrefs } from '$lib/game/types';
 	import { GameState } from '$lib/game/game-state.svelte';
-	import { getOrCreateGuestId, loadBlob, saveBlob } from '$lib/game/persistence';
+	import { getOrCreateGuestId, loadBlob, saveBlob, writePrefs } from '$lib/game/persistence';
+	import { resolveBoardPrefs } from '$lib/game/palette';
+	import { syncPrefsToProfile } from '$lib/auth/profile';
 	import { sendHeartbeat, startPlay, submitPlay } from '$lib/game/play-client';
 	import { appendRecord, recordFromResult } from '$lib/history/records';
 	import { formatTime } from '$lib/game/format';
 	import { heartbeat } from '$lib/config';
 	import Board from '$lib/components/Board.svelte';
+	import BoardSettings from '$lib/components/BoardSettings.svelte';
 	import StreakBadge from '$lib/components/StreakBadge.svelte';
 	import { AUTH_CONTEXT, type AuthContext } from '$lib/auth/context';
 	import { computeStreak, dublinToday, viewStreak } from '$lib/streak/streak';
@@ -38,8 +41,36 @@
 	let submitting = $state(false);
 	let submitFailed = $state(false);
 
+	// How this player wants the board rendered. Read from the local blob on mount and
+	// resolved through `resolveBoardPrefs`, which owns the fallbacks — so an unknown
+	// stored palette (one retired since the pref was written) still renders a board.
+	//
+	// The blob is the ONE place this component reads prefs from, in both directions of
+	// the sync. Pulling the profile down onto the device is already AuthState's job (it
+	// writes the profile's prefs into the blob on every authenticated load), so mirroring
+	// that here would be a second writer racing the first — and the loser would be
+	// whichever held the player's actual choice.
+	let prefs = $state<GuestPrefs>({});
+	const boardPrefs = $derived(resolveBoardPrefs(prefs));
+
 	let storage: Storage | null = null;
 	let guestId = '';
+
+	/**
+	 * Apply a pref change: to the screen now, to local storage always, and up to the
+	 * profile when signed in. Only the changed fields are sent, so a partial write never
+	 * overwrites a pref this device never set.
+	 *
+	 * Pushing up is what keeps the choice: AuthState pulls the profile down onto the
+	 * device on the next load, so a change that stopped at localStorage would be
+	 * overwritten by the profile's older value. A failed push is swallowed — it costs
+	 * this device's setting on a later load, and must never interrupt a solve.
+	 */
+	function changePrefs(patch: GuestPrefs): void {
+		prefs = { ...prefs, ...patch };
+		if (storage) writePrefs(storage, patch);
+		if (auth?.signedIn) void syncPrefsToProfile(patch).catch(() => {});
+	}
 
 	onMount(() => {
 		storage = window.localStorage;
@@ -52,6 +83,7 @@
 		const restored = blob?.play?.puzzleId === daily.id ? blob.play : undefined;
 		game = new GameState(daily, restored);
 
+		prefs = blob?.prefs ?? {};
 		solvedDates = blob?.solvedDates ?? [];
 		// A restored, already-solved TODAY play still belongs to its day's streak.
 		if (
@@ -183,6 +215,8 @@
 		</p>
 	{/if}
 
+	<BoardSettings {prefs} onChange={changePrefs} />
+
 	<div
 		class="board-wrap"
 		style={`--cell-size: min(2.75rem, calc((100vw - 2.5rem) / ${game.size}))`}
@@ -191,6 +225,8 @@
 			regionMap={game.regionMap}
 			board={game.board}
 			conflicts={game.conflicts}
+			palette={boardPrefs.palette}
+			regionLabels={boardPrefs.regionLabels}
 			onTap={(row, col) => game?.tap(row, col)}
 			onToggleX={(row, col) => game?.toggleX(row, col)}
 			onSweep={(cells: readonly Cell[]) => game?.sweep(cells)}
