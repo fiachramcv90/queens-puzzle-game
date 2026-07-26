@@ -19,7 +19,8 @@
 		"seed:remote": "tsx scripts/seed-remote.ts",
 		"build:edge-bundles": "node scripts/build-edge-bundles.mjs",
 		"supabase:start": "supabase start",
-		"supabase:stop": "supabase stop"
+		"supabase:stop": "supabase stop",
+		"retention": "tsx scripts/run-retention.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.39.1",

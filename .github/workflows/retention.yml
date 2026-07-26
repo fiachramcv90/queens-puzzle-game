@@ -1,0 +1,69 @@
+name: Retention and alarm
+
+# The operational tail (#33): two retention clocks and the unverified alarm.
+#
+# TWO CLOCKS, deliberately independent:
+#   * unconverted guest play rows purge at 90 days (retention.guestPlaysDays);
+#   * move logs drop on their own, shorter clock (retention.moveLogsDays) while the
+#     play rows they belonged to are kept FOREVER, because history and streaks
+#     depend on those. That split is why play_move_logs is a separate table.
+#
+# THE ALARM. A replay mismatch flags a play `unverified`, and a mismatch is as likely
+# a solver-core deploy skew as a cheater — so a spike means "suspect a deploy first".
+# An alarm nobody can see is not an alarm, so the run emits a ::warning:: (which
+# surfaces on the run itself) and exits non-zero, making it a red run in the Actions
+# list rather than a line buried in a log.
+#
+# Numbers live in src/lib/config (`retention.*`), never in this file.
+#
+# One-time setup: the same two repository secrets the pool generator uses —
+# SUPABASE_SECRET_KEY and PUBLIC_SUPABASE_URL.
+
+on:
+  schedule:
+    # Daily at 04:00 UTC — after the weekly pool run's 03:00 slot, and well clear of
+    # the Europe/Dublin midnight rollover in either half of the year.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report the unverified rate without deleting anything'
+        type: boolean
+        required: false
+        default: false
+
+# Never let two sweeps race against the same database.
+concurrency:
+  group: retention
+  cancel-in-progress: false
+
+jobs:
+  retention:
+    name: Sweep expired data and check the unverified rate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check the secrets are configured
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+        run: |
+          if [ -z "$SUPABASE_SECRET_KEY" ] || [ -z "$PUBLIC_SUPABASE_URL" ]; then
+            echo "::error::SUPABASE_SECRET_KEY and PUBLIC_SUPABASE_URL must both be set as repository secrets."
+            exit 1
+          fi
+
+      - name: Run retention
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+        run: npm run retention -- ${{ inputs.dry_run && '--dry-run' || '' }}
