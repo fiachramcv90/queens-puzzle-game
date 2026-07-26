@@ -128,6 +128,30 @@ export async function fetchProfile(): Promise<Profile | null> {
 }
 
 /**
+ * The signed-in player's own id, for use as an explicit filter on a write.
+ *
+ * Every UPDATE through the Data API MUST carry a WHERE clause. Supabase preloads the
+ * `safeupdate` extension on the `authenticator` role, which rejects an unfiltered
+ * UPDATE outright — and, crucially, **an RLS policy does not count as one**. A write
+ * relying on `using (id = auth.uid())` to scope itself is refused before RLS is ever
+ * consulted, with `UPDATE requires a WHERE clause`.
+ *
+ * So `.eq('id', …)` below is not the security boundary — RLS still is, and it still
+ * rejects a filter naming anyone else's row. The filter is what makes the statement
+ * legal in the first place.
+ *
+ * Read from the local session rather than `getUser()`: this runs on every pref change,
+ * and `getUser()` is a network round trip for an id the session already holds.
+ */
+async function ownProfileId(): Promise<string> {
+	const { data, error } = await supabaseBrowserClient().auth.getSession();
+	if (error) throw error;
+	const id = data.session?.user.id;
+	if (!id) throw new Error('Not signed in.');
+	return id;
+}
+
+/**
  * Confirm (and optionally edit) the display name — the one-time action that dismisses
  * the prompt for good. Sets name_confirmed true so it never appears again.
  */
@@ -136,6 +160,7 @@ export async function confirmDisplayName(displayName: string): Promise<void> {
 	const { error } = await supabaseBrowserClient()
 		.from('profiles')
 		.update({ display_name: trimmed, name_confirmed: true })
+		.eq('id', await ownProfileId())
 		.select('id')
 		.single();
 	if (error) throw error;
@@ -151,6 +176,7 @@ export async function syncPrefsToProfile(prefs: GuestPrefs): Promise<void> {
 	const { error } = await supabaseBrowserClient()
 		.from('profiles')
 		.update(columns)
+		.eq('id', await ownProfileId())
 		.select('id')
 		.single();
 	if (error) throw error;
