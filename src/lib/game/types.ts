@@ -35,13 +35,21 @@ export interface Daily {
  * the in-progress board, and mirrored to the profile once signed in so they follow
  * the player across devices (see `$lib/auth/profile`). Every field is optional: a blob
  * written before a pref existed still loads, falling back to the base experience. The
- * palette token set and the region-label toggle are defined by the accessibility
- * ticket (#24); their names are reserved here so prefs have one home to grow into.
+ * palette token set and the region-label toggle are defined in `$lib/game/palette`,
+ * which also owns how these two fields resolve into what the board draws.
  */
 export interface GuestPrefs {
-	/** Named palette token set. Reserved for #24; the base palette until then. */
+	/**
+	 * Which palette token set to fill regions from — a `PaletteId` from
+	 * `$lib/game/palette`. Typed as a plain string, not the union, because it is read
+	 * back from storage and from the profile column: a palette retired since this was
+	 * written must load and fall back, not fail to parse. `resolvePalette` does that.
+	 */
 	readonly palette?: string;
-	/** Show region labels for colourblind safety. Reserved for #24. */
+	/**
+	 * Draw the per-region letter — the last-resort region identifier. Opt-in inside
+	 * the colourblind-friendly palette only; `resolveBoardPrefs` enforces that.
+	 */
 	readonly regionLabels?: boolean;
 	/** Auto-place mark (X) on cells a placed queen rules out. */
 	readonly autoMarkX?: boolean;

@@ -77,11 +77,11 @@ describe('writePrefs — pulling authoritative profile prefs down onto the devic
 			play: { puzzleId: 'p1', board: [], startedAt: 1000 }
 		});
 
-		writePrefs(storage, { palette: 'high-contrast', regionLabels: true, autoMarkX: false });
+		writePrefs(storage, { palette: 'cvd', regionLabels: true, autoMarkX: false });
 
 		const after = loadBlob(storage);
 		expect(after?.prefs).toEqual({
-			palette: 'high-contrast',
+			palette: 'cvd',
 			regionLabels: true,
 			autoMarkX: false
 		});
@@ -90,7 +90,7 @@ describe('writePrefs — pulling authoritative profile prefs down onto the devic
 
 	it('is a no-op when there is no blob to attach prefs to', () => {
 		const storage = memoryStorage();
-		writePrefs(storage, { palette: 'high-contrast' });
+		writePrefs(storage, { palette: 'cvd' });
 		expect(loadBlob(storage)).toBeNull();
 	});
 });
