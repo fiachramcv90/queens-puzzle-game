@@ -291,20 +291,20 @@
 	.timer {
 		font-variant-numeric: tabular-nums;
 		font-size: 1.05rem;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.timer.solved {
-		color: #0f6e56;
+		color: var(--accent);
 		font-weight: 600;
 	}
 
 	.archive-note {
 		margin: 0 0 0.75rem;
 		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		background: #f0ede6;
-		color: #6b5f3f;
-		font-size: 0.85rem;
+		border-radius: var(--radius);
+		background: var(--warm-surface);
+		color: var(--warm-ink);
+		font-size: var(--text-sm);
 	}
 
 	.board-wrap {
@@ -316,52 +316,42 @@
 		margin: 0.5rem 0 0.25rem;
 	}
 	.status.won {
-		color: #0f6e56;
+		color: var(--accent);
 	}
 
+	/* The post-solve panel. It is the payoff for the whole session, so it reads as a
+	   result card rather than three stacked paragraphs. */
 	.result {
-		margin: 0.5rem 0 0.25rem;
+		margin: var(--space-3) 0 var(--space-2);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius);
+		background: var(--accent-surface);
 	}
 	.result-headline {
 		font-weight: 700;
-		font-size: 1.15rem;
-		color: #0f6e56;
+		font-size: var(--text-lg);
+		color: var(--accent);
 		margin: 0 0 0.15rem;
 	}
 	.result-detail {
 		margin: 0;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.badge {
 		display: inline-block;
 		margin: 0.4rem 0.4rem 0 0;
 		padding: 0.15rem 0.5rem;
-		border-radius: 0.5rem;
-		background: #f0ede6;
-		color: #6b5f3f;
-		font-size: 0.8rem;
+		border-radius: var(--radius);
+		background: var(--warm-surface);
+		color: var(--warm-ink);
+		font-size: var(--text-xs);
 	}
 
 	.hint {
-		color: #888;
-		font-size: 0.85rem;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
 		margin: 0.25rem 0 0;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.timer {
-			color: #aaa;
-		}
-		.hint {
-			color: #999;
-		}
-		.result-detail {
-			color: #aaa;
-		}
-		.badge,
-		.archive-note {
-			background: #2a2822;
-			color: #cdbb8a;
-		}
 	}
 </style>

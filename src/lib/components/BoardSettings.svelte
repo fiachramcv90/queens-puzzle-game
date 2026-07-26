@@ -116,13 +116,7 @@
 
 	.note {
 		margin: 0.6rem 0 0;
-		color: #666;
-		font-size: 0.8rem;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.note {
-			color: #aaa;
-		}
+		color: var(--text-muted);
+		font-size: var(--text-xs);
 	}
 </style>

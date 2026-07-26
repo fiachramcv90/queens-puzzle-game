@@ -44,47 +44,31 @@
 		align-items: baseline;
 		gap: 0.3rem;
 		font-weight: 700;
-		color: #b3541e;
+		color: var(--streak);
 	}
 	.flame {
 		font-size: 1.05rem;
 	}
 	.count {
 		font-variant-numeric: tabular-nums;
-		font-size: 1.15rem;
+		font-size: var(--text-lg);
 	}
 	.label {
 		font-weight: 500;
-		color: #6b5f3f;
+		color: var(--warm-ink);
 	}
 	.longest {
-		color: #777;
-		font-size: 0.85rem;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
 	}
 	/* At-risk: the held streak is still theirs, so it stays prominent — the amber cue
 	   is a reminder to solve today, not a bereavement notice. */
 	.streak.at-risk .current {
-		color: #9a6b12;
+		color: var(--streak-at-risk);
 	}
 	.risk {
-		color: #9a6b12;
+		color: var(--streak-at-risk);
 		font-weight: 600;
-		font-size: 0.8rem;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.current {
-			color: #e79a5e;
-		}
-		.label {
-			color: #cdbb8a;
-		}
-		.longest {
-			color: #999;
-		}
-		.streak.at-risk .current,
-		.risk {
-			color: #e0b458;
-		}
+		font-size: var(--text-xs);
 	}
 </style>
