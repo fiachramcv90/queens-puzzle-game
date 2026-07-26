@@ -30,6 +30,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { generatePuzzle, type GeneratedPuzzle } from '../src/lib/solver/index';
+import { buildSeedWindow, type SeedEntry } from '../src/lib/pool/seed-window';
 import { dublinDate } from '../src/lib/streak/streak';
 
 const url = process.env.PUBLIC_SUPABASE_URL;
@@ -42,56 +43,16 @@ if (!secretKey) throw new Error('SUPABASE_SECRET_KEY is not set (the service_rol
 const PAST_DAYS = Number(process.env.SEED_PAST_DAYS ?? 21);
 const FUTURE_DAYS = Number(process.env.SEED_FUTURE_DAYS ?? 14);
 
-/** A gentle repeating size ramp so consecutive dailies vary. */
-const SIZE_RAMP = [7, 7, 8, 8, 9, 9, 10] as const;
-
-interface SeedEntry {
-	/** The daily's date, `YYYY-MM-DD` (Europe/Dublin). */
-	readonly date: string;
-	readonly size: number;
-	readonly seed: number;
-}
-
 /**
- * The Dublin date `offset` days from `from` (negative = earlier). Pure calendar
- * arithmetic at UTC midnight, so it never depends on the runtime zone — the same
- * approach `previousDate` in $lib/streak uses.
- */
-function shiftDate(from: string, offset: number): string {
-	const [y, m, d] = from.split('-').map(Number);
-	const shifted = new Date(Date.UTC(y, m - 1, d) + offset * 86_400_000);
-	return shifted.toISOString().slice(0, 10);
-}
-
-/**
- * The RNG seed for a date: its own `YYYYMMDD` as an integer.
- *
- * Derived from the date rather than from a position in the window, for two reasons. It is
- * stable — the same date always regenerates the same board, whatever window it is seeded
- * in — and it occupies a numeric range that cannot collide with the small hand-picked
- * seeds (1001–1006) the original local seed script used. A collision there is not
- * cosmetic: identical (size, seed) inputs regenerate an identical board, whose canonical
- * hash matches a puzzle that is already scheduled, and `puzzle_schedule.puzzle_id` is
- * unique because a puzzle may be scheduled at most once.
- */
-function seedForDate(date: string): number {
-	return Number(date.replaceAll('-', ''));
-}
-
-/**
- * The continuous window of dates to seed, oldest first. Anchored on today's Dublin date
- * via `dublinDate` — the client mirror of SQL `dublin_today()` — because PostgREST
- * cannot call the SQL function for us the way the local seed's `insert … values` does.
+ * The window to seed. Anchored on today's Dublin date via `dublinDate` — the client mirror
+ * of SQL `dublin_today()` — because PostgREST cannot call that function for us the way the
+ * local seed's `insert … values` can.
  */
 function buildEntries(): SeedEntry[] {
-	const today = dublinDate();
-	return Array.from({ length: PAST_DAYS + FUTURE_DAYS + 1 }, (_unused, i): SeedEntry => {
-		const date = shiftDate(today, -(PAST_DAYS - i));
-		return {
-			date,
-			size: SIZE_RAMP[i % SIZE_RAMP.length],
-			seed: seedForDate(date)
-		};
+	return buildSeedWindow({
+		today: dublinDate(),
+		pastDays: PAST_DAYS,
+		futureDays: FUTURE_DAYS
 	});
 }
 
