@@ -4,6 +4,24 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			// Apply the stored theme BEFORE first paint.
+			//
+			// This is blocking and inline on purpose. Setting `data-theme` from a Svelte
+			// effect would run after hydration, so a player who has pinned light on a
+			// dark-mode phone would see a dark page flash first and then snap — worse
+			// than not having the setting at all. There is no way to avoid that except
+			// to touch the element before the browser paints, which means here.
+			//
+			// The key and the fallback are duplicated from $lib/theme/theme.ts because
+			// this runs before any module loads. Both are commented at that end too.
+			try {
+				var t = localStorage.getItem('queens:theme:v1');
+				if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+			} catch (e) {
+				// Storage blocked (private mode): fall through to the OS preference.
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

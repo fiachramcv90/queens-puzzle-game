@@ -224,10 +224,11 @@
 
 	<BoardSettings {prefs} onChange={changePrefs} />
 
-	<!-- Hints are offered only while the play is live. After the result screen there is
-	     nothing left to help with, and a "reveal" control beside a finished solve would
-	     read as an invitation to redo it. -->
-	{#if !game.result}
+	<!-- Hints are offered only while the play is live. Keyed on `solved` rather than on
+	     the server's `result`, because between those two there is a round trip during
+	     which the board is finished but the reply has not landed — and a "reveal"
+	     control beside a completed board reads as an invitation to redo it. -->
+	{#if !game.solved}
 		<HintPanel {game} onAutoMarkXChange={(on) => changePrefs({ autoMarkX: on })} />
 	{/if}
 
@@ -242,6 +243,7 @@
 			flagged={game.flagged}
 			palette={boardPrefs.palette}
 			regionLabels={boardPrefs.regionLabels}
+			locked={game.solved}
 			onTap={(row, col) => game?.tap(row, col)}
 			onToggleX={(row, col) => game?.toggleX(row, col)}
 			onSweep={(cells: readonly Cell[]) => game?.sweep(cells)}

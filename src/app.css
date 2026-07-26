@@ -22,44 +22,72 @@
   spends tokens is correct in both schemes without knowing either exists.
 */
 
-:root {
-	/* Tell the user agent which schemes we support, so the canvas, form controls,
-	   scrollbars and spellcheck underlines follow the player's choice instead of
-	   staying light under dark text. */
-	color-scheme: light dark;
+/*
+  THEME SELECTION.
 
+  `color-scheme` is the only thing the toggle changes, and every token below is a
+  `light-dark()` pair that resolves against it. That is the whole mechanism:
+
+    :root                    → `light dark`, so the OS preference decides
+    :root[data-theme=light]  → `light`, pinned
+    :root[data-theme=dark]   → `dark`, pinned
+
+  Doing it this way rather than duplicating the token block under a media query and
+  again under an attribute selector means each colour is still declared EXACTLY ONCE.
+  A second copy is how a theme drifts: someone edits the dark value in one of the two
+  places and the other quietly keeps the old one.
+
+  It also makes the user agent agree with us for free — the canvas, form controls,
+  scrollbars and spellcheck underlines all follow `color-scheme`, so a pinned light
+  theme on a dark-mode phone does not get dark native widgets on a light page.
+*/
+:root {
+	color-scheme: light dark;
+}
+
+:root[data-theme='light'] {
+	color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+}
+
+:root {
 	/* --- Surfaces and ink --- */
 	/* Warm off-white rather than pure #fff: the badges and panels are warm neutrals
 	   already, and a warm page keeps the board's pastel fills from reading as dingy. */
-	--bg: #fbfaf7;
-	--surface: #f4f2ec;
-	--surface-sunken: #f0ede6;
-	--text: #1a1a1a;
-	--text-muted: #5f5b52;
-	--border: rgba(0, 0, 0, 0.14);
-	--border-strong: rgba(0, 0, 0, 0.25);
+	--bg: light-dark(#fbfaf7, #191813);
+	--surface: light-dark(#f4f2ec, #23231f);
+	--surface-sunken: light-dark(#f0ede6, #2a2822);
+	--text: light-dark(#1a1a1a, #e8e8e8);
+	--text-muted: light-dark(#5f5b52, #a8a49b);
+	--border: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.16));
+	--border-strong: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.28));
 
 	/* --- Accent: the solve-green that already ran through the timer, the result
-	       headline and the leaderboard times. --accent-ink is what sits ON it. --- */
-	--accent: #0f6e56;
-	--accent-ink: #ffffff;
-	--accent-surface: #eef6f2;
+	       headline and the leaderboard times. --accent-ink is what sits ON it.
+	       The light-mode green is too dark to read on a dark surface, so the dark
+	       half is lifted to clear 4.5:1 against --bg. --- */
+	--accent: light-dark(#0f6e56, #4ec39d);
+	--accent-ink: light-dark(#ffffff, #06231b);
+	--accent-surface: light-dark(#eef6f2, #1c2a25);
 
 	/* --- Warm accent: archive notes, badges, the "this doesn't count" family --- */
-	--warm-surface: #f0ede6;
-	--warm-ink: #6b5f3f;
+	--warm-surface: light-dark(#f0ede6, #2a2822);
+	--warm-ink: light-dark(#6b5f3f, #cdbb8a);
 
 	/* --- Streak: hot for a live streak, amber while at risk --- */
-	--streak: #b3541e;
-	--streak-at-risk: #8a5f10;
+	--streak: light-dark(#b3541e, #e79a5e);
+	--streak-at-risk: light-dark(#8a5f10, #e0b458);
 
-	--danger: #b00020;
-	--danger-surface: #fdeceb;
+	--danger: light-dark(#b00020, #ff8a80);
+	--danger-surface: light-dark(#fdeceb, #3a1f1d);
 
 	/* --- The focus ring. Its own token because it must clear 3:1 against BOTH the
 	       page and any control background, which neither --accent nor --border does
 	       on its own in both schemes. --- */
-	--focus-ring: #1462d4;
+	--focus-ring: light-dark(#1462d4, #7fb2ff);
 	--focus-ring-width: 3px;
 	--focus-ring-offset: 2px;
 
@@ -70,13 +98,13 @@
 	       it was chosen for. See $lib/game/palette. --- */
 	--cage-line: #1a1a1a;
 	--cage-width: 2px;
-	--grid-line: rgba(0, 0, 0, 0.12);
+	--grid-line: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.18));
 	--grid-width: 1px;
 	--conflict-ring: #e24b4a;
 	/* Focus on a board cell: an inset ring like the conflict ring, but a different
 	   hue and drawn inside it, so "focused" and "clashing" are never confused — a
 	   cell can legitimately be both at once. */
-	--cell-focus-ring: #1462d4;
+	--cell-focus-ring: light-dark(#1462d4, #1d4ed8);
 
 	/* --- Scale --- */
 	--radius-sm: 0.35rem;
@@ -96,38 +124,6 @@
 	--text-2xl: 2.25rem;
 
 	--font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-	:root {
-		--bg: #191813;
-		--surface: #23231f;
-		--surface-sunken: #2a2822;
-		--text: #e8e8e8;
-		--text-muted: #a8a49b;
-		--border: rgba(255, 255, 255, 0.16);
-		--border-strong: rgba(255, 255, 255, 0.28);
-
-		/* The light-mode green is too dark to read on a dark surface — same role,
-		   lifted to clear 4.5:1 against --bg. */
-		--accent: #4ec39d;
-		--accent-ink: #06231b;
-		--accent-surface: #1c2a25;
-
-		--warm-surface: #2a2822;
-		--warm-ink: #cdbb8a;
-
-		--streak: #e79a5e;
-		--streak-at-risk: #e0b458;
-
-		--danger: #ff8a80;
-		--danger-surface: #3a1f1d;
-
-		--focus-ring: #7fb2ff;
-		--cell-focus-ring: #1d4ed8;
-
-		--grid-line: rgba(0, 0, 0, 0.18);
-	}
 }
 
 html {
