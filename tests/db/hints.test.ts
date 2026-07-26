@@ -138,6 +138,11 @@ describe('mark_play_assisted', () => {
 });
 
 describe('load_play_for_reveal', () => {
+	// The jsonb out-parameter arrives as a STRING over this driver, not as a parsed
+	// array — which is exactly why `reveal/index.ts` runs every solution through its
+	// `asSolution` guard rather than trusting the shape. This asserts the value that
+	// guard produces, since that is what the Edge Function actually feeds to
+	// `nextReveal`; asserting the raw column would be testing the driver.
 	test('returns the hidden solution for an open play', async () => {
 		const token = await openPlay();
 		const [result] = await sql<{ status: string; solution: unknown; board_size: number }[]>`
@@ -145,8 +150,16 @@ describe('load_play_for_reveal', () => {
     `;
 		expect(result.status).toBe('ok');
 		expect(result.board_size).toBe(5);
-		expect(Array.isArray(result.solution)).toBe(true);
-		expect(result.solution).toHaveLength(5);
+
+		const solution =
+			typeof result.solution === 'string'
+				? (JSON.parse(result.solution) as { row: number; col: number }[])
+				: (result.solution as { row: number; col: number }[]);
+
+		expect(solution).toHaveLength(5);
+		// One queen per row, and every cell on the board — the shape `nextReveal` scans.
+		expect(new Set(solution.map((c) => c.row)).size).toBe(5);
+		expect(solution.every((c) => c.row >= 0 && c.row < 5 && c.col >= 0 && c.col < 5)).toBe(true);
 	});
 
 	// It deliberately does NOT charge: a load that produced no cell must not cost the
