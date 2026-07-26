@@ -33,64 +33,37 @@
 	<meta name="description" content="Every past daily since launch — permanently playable." />
 </svelte:head>
 
-<main>
-	<h1>Archive</h1>
+<h1>Archive</h1>
 
-	<nav class="links">
-		<a href={resolve('/')}>Today</a>
-		<a href={resolve('/history')}>History</a>
-	</nav>
+<p class="intro">
+	Every past daily since launch stays playable — no account needed. Archive solves are recorded to
+	your history but don't affect your streak or that day's leaderboard.
+</p>
 
-	<p class="intro">
-		Every past daily since launch stays playable — no account needed. Archive solves are recorded to
-		your history but don't affect your streak or that day's leaderboard.
+{#if data.dailies.length === 0}
+	<p class="placeholder">
+		The archive isn't available right now. Check your connection and refresh.
 	</p>
-
-	{#if data.dailies.length === 0}
-		<p class="placeholder">
-			The archive isn't available right now. Check your connection and refresh.
-		</p>
-	{:else}
-		<ul class="archive">
-			{#each data.dailies as d (d.date)}
-				<li class="entry">
-					<a href={d.date === today ? resolve('/') : resolve('/play/[date]', { date: d.date })}>
-						<span class="date">{d.date}</span>
-						<span class="tier">{d.boardSize}×{d.boardSize} · {d.tier}</span>
-						{#if d.date === today}
-							<span class="tag today">today</span>
-						{/if}
-						{#if played.has(d.date)}
-							<span class="tag solved">solved</span>
-						{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-</main>
+{:else}
+	<ul class="archive">
+		{#each data.dailies as d (d.date)}
+			<li class="entry">
+				<a href={d.date === today ? resolve('/') : resolve('/play/[date]', { date: d.date })}>
+					<span class="date">{d.date}</span>
+					<span class="tier">{d.boardSize}×{d.boardSize} · {d.tier}</span>
+					{#if d.date === today}
+						<span class="tag today">today</span>
+					{/if}
+					{#if played.has(d.date)}
+						<span class="tag solved">solved</span>
+					{/if}
+				</a>
+			</li>
+		{/each}
+	</ul>
+{/if}
 
 <style>
-	main {
-		max-width: 32rem;
-		margin: 0 auto;
-		padding: 2rem 1.25rem 4rem;
-		font-family: system-ui, sans-serif;
-		line-height: 1.6;
-	}
-
-	h1 {
-		font-size: 2.25rem;
-		margin: 0 0 0.5rem;
-	}
-
-	.links {
-		display: flex;
-		gap: 1rem;
-		margin-bottom: 1rem;
-		font-size: 0.95rem;
-	}
-
 	.intro {
 		color: #666;
 		font-size: 0.9rem;
@@ -139,24 +112,13 @@
 		background: #dff0e8;
 		color: #0f6e56;
 	}
-	.tag.today + .tag.solved {
-		margin-left: 0;
-	}
-
-	.placeholder {
-		color: #666;
-	}
 
 	@media (prefers-color-scheme: dark) {
-		main {
-			color: #e8e8e8;
-		}
 		.entry a {
 			border-bottom-color: rgba(255, 255, 255, 0.12);
 		}
 		.intro,
-		.tier,
-		.placeholder {
+		.tier {
 			color: #aaa;
 		}
 		.tag {

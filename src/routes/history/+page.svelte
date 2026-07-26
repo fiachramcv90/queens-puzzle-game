@@ -42,77 +42,50 @@
 	<meta name="description" content="Every daily you've played — solve time, mistakes and hints." />
 </svelte:head>
 
-<main>
-	<h1>History</h1>
+<h1>History</h1>
 
-	<nav class="links">
-		<a href={resolve('/')}>Today</a>
-		<a href={resolve('/archive')}>Archive</a>
-	</nav>
-
-	{#if !loaded}
-		<p class="placeholder">Loading your history…</p>
-	{:else if entries.length === 0}
-		<p class="placeholder">
-			No solves yet. Play <a href={resolve('/')}>today's daily</a> or catch up in the
-			<a href={resolve('/archive')}>archive</a>.
-		</p>
-	{:else}
-		<ul class="history">
-			{#each entries as entry (entry.puzzleDate)}
-				<li class="entry">
-					<div class="row">
-						<span class="date">{entry.puzzleDate}</span>
-						<span class="time">
-							{#if entry.ranked && entry.replayed && entry.ranked.elapsedMs !== entry.best.elapsedMs}
-								<!-- The first-play-only rule, made visible rather than mysterious. -->
-								your best: {formatTime(entry.best.elapsedMs)} · ranked:
-								{formatTime(entry.ranked.elapsedMs)}
-							{:else}
-								{formatTime(entry.best.elapsedMs)}
-							{/if}
-						</span>
-					</div>
-					<div class="detail">
-						<span>{mistakesLabel(entry.best.mistakes)}</span>
-						{#if entry.best.hintsUsed > 0}
-							<span>· {entry.best.hintsUsed} hint{entry.best.hintsUsed === 1 ? '' : 's'}</span>
+{#if !loaded}
+	<p class="placeholder">Loading your history…</p>
+{:else if entries.length === 0}
+	<p class="placeholder">
+		No solves yet. Play <a href={resolve('/')}>today's daily</a> or catch up in the
+		<a href={resolve('/archive')}>archive</a>.
+	</p>
+{:else}
+	<ul class="history">
+		{#each entries as entry (entry.puzzleDate)}
+			<li class="entry">
+				<div class="row">
+					<span class="date">{entry.puzzleDate}</span>
+					<span class="time">
+						{#if entry.ranked && entry.replayed && entry.ranked.elapsedMs !== entry.best.elapsedMs}
+							<!-- The first-play-only rule, made visible rather than mysterious. -->
+							your best: {formatTime(entry.best.elapsedMs)} · ranked:
+							{formatTime(entry.ranked.elapsedMs)}
+						{:else}
+							{formatTime(entry.best.elapsedMs)}
 						{/if}
-						{#if entry.streakNeutral}
-							<span class="tag">archive · streak-neutral · unranked</span>
-						{:else if entry.assisted}
-							<span class="tag">assisted · unranked</span>
-						{:else if entry.unranked}
-							<span class="tag">unranked</span>
-						{/if}
-					</div>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-</main>
+					</span>
+				</div>
+				<div class="detail">
+					<span>{mistakesLabel(entry.best.mistakes)}</span>
+					{#if entry.best.hintsUsed > 0}
+						<span>· {entry.best.hintsUsed} hint{entry.best.hintsUsed === 1 ? '' : 's'}</span>
+					{/if}
+					{#if entry.streakNeutral}
+						<span class="tag">archive · streak-neutral · unranked</span>
+					{:else if entry.assisted}
+						<span class="tag">assisted · unranked</span>
+					{:else if entry.unranked}
+						<span class="tag">unranked</span>
+					{/if}
+				</div>
+			</li>
+		{/each}
+	</ul>
+{/if}
 
 <style>
-	main {
-		max-width: 32rem;
-		margin: 0 auto;
-		padding: 2rem 1.25rem 4rem;
-		font-family: system-ui, sans-serif;
-		line-height: 1.6;
-	}
-
-	h1 {
-		font-size: 2.25rem;
-		margin: 0 0 0.5rem;
-	}
-
-	.links {
-		display: flex;
-		gap: 1rem;
-		margin-bottom: 1rem;
-		font-size: 0.95rem;
-	}
-
 	.history {
 		list-style: none;
 		padding: 0;
@@ -160,19 +133,11 @@
 		font-size: 0.75rem;
 	}
 
-	.placeholder {
-		color: #666;
-	}
-
 	@media (prefers-color-scheme: dark) {
-		main {
-			color: #e8e8e8;
-		}
 		.entry {
 			border-bottom-color: rgba(255, 255, 255, 0.12);
 		}
-		.detail,
-		.placeholder {
+		.detail {
 			color: #aaa;
 		}
 		.tag {
