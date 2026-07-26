@@ -6,6 +6,7 @@ import {
 	DEFAULT_PALETTE_ID,
 	PALETTES,
 	PALETTE_LIST,
+	isAccessibilityPalette,
 	isPaletteId,
 	regionColor,
 	regionLabel,
@@ -99,6 +100,13 @@ describe('resolvePalette', () => {
 		expect(isPaletteId(DEFAULT_PALETTE_ID)).toBe(true);
 		expect(isPaletteId(CVD_PALETTE_ID)).toBe(true);
 		expect(isPaletteId('nope')).toBe(false);
+	});
+});
+
+describe('isAccessibilityPalette', () => {
+	it('identifies the CVD palette as accessibility mode and the default as not', () => {
+		expect(isAccessibilityPalette(PALETTES[CVD_PALETTE_ID])).toBe(true);
+		expect(isAccessibilityPalette(PALETTES[DEFAULT_PALETTE_ID])).toBe(false);
 	});
 });
 

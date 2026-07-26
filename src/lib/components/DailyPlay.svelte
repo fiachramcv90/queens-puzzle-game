@@ -5,7 +5,7 @@
 	import { GameState } from '$lib/game/game-state.svelte';
 	import { getOrCreateGuestId, loadBlob, saveBlob, writePrefs } from '$lib/game/persistence';
 	import { resolveBoardPrefs } from '$lib/game/palette';
-	import { profileToPrefs, syncPrefsToProfile } from '$lib/auth/profile';
+	import { syncPrefsToProfile } from '$lib/auth/profile';
 	import { sendHeartbeat, startPlay, submitPlay } from '$lib/game/play-client';
 	import { appendRecord, recordFromResult } from '$lib/history/records';
 	import { formatTime } from '$lib/game/format';
@@ -41,40 +41,36 @@
 	let submitting = $state(false);
 	let submitFailed = $state(false);
 
-	// How this player wants the board rendered. Seeded from the local blob on mount and
+	// How this player wants the board rendered. Read from the local blob on mount and
 	// resolved through `resolveBoardPrefs`, which owns the fallbacks — so an unknown
 	// stored palette (one retired since the pref was written) still renders a board.
+	//
+	// The blob is the ONE place this component reads prefs from, in both directions of
+	// the sync. Pulling the profile down onto the device is already AuthState's job (it
+	// writes the profile's prefs into the blob on every authenticated load), so mirroring
+	// that here would be a second writer racing the first — and the loser would be
+	// whichever held the player's actual choice.
 	let prefs = $state<GuestPrefs>({});
 	const boardPrefs = $derived(resolveBoardPrefs(prefs));
-
-	// Whether the player has changed a setting in THIS session. Once they have, a
-	// profile arriving late must not overwrite the choice they just made; until they
-	// have, the profile is authoritative and adopting it is what makes prefs follow a
-	// signed-in player across devices.
-	let prefsTouched = $state(false);
 
 	let storage: Storage | null = null;
 	let guestId = '';
 
 	/**
 	 * Apply a pref change: to the screen now, to local storage always, and up to the
-	 * profile when signed in. Only the changed fields are sent, so a partial write
-	 * never overwrites a pref this device never set.
+	 * profile when signed in. Only the changed fields are sent, so a partial write never
+	 * overwrites a pref this device never set.
+	 *
+	 * Pushing up is what keeps the choice: AuthState pulls the profile down onto the
+	 * device on the next load, so a change that stopped at localStorage would be
+	 * overwritten by the profile's older value. A failed push is swallowed — it costs
+	 * this device's setting on a later load, and must never interrupt a solve.
 	 */
 	function changePrefs(patch: GuestPrefs): void {
-		prefsTouched = true;
 		prefs = { ...prefs, ...patch };
 		if (storage) writePrefs(storage, patch);
 		if (auth?.signedIn) void syncPrefsToProfile(patch).catch(() => {});
 	}
-
-	// The profile is the source of truth for prefs once signed in, and it resolves after
-	// mount, so adopt it when it lands. Skipped once the player has touched a control.
-	$effect(() => {
-		const profile = auth?.profile;
-		if (!profile || prefsTouched) return;
-		prefs = profileToPrefs(profile);
-	});
 
 	onMount(() => {
 		storage = window.localStorage;

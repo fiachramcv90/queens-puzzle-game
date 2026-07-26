@@ -126,9 +126,22 @@ export function regionColor(palette: Palette, regionId: number): RegionColor {
 	return palette.colors[regionId % palette.colors.length];
 }
 
-/** The letter identifying a region: A, B, C… in region-id order. */
+/**
+ * The letter identifying a region: A, B, C… in region-id order. Wraps past Z for the
+ * same reason `regionColor` wraps — a board that outgrew the alphabet should render
+ * something rather than nothing — which no MVP board (≤11 regions) comes near.
+ */
 export function regionLabel(regionId: number): string {
 	return String.fromCharCode(65 + (regionId % 26));
+}
+
+/**
+ * Whether a palette is the colourblind-friendly one — i.e. whether the player is in
+ * accessibility mode. The one place that question is answered, so the settings control
+ * and `resolveBoardPrefs` cannot disagree about what "inside accessibility mode" means.
+ */
+export function isAccessibilityPalette(palette: Palette): boolean {
+	return palette.id === CVD_PALETTE_ID;
 }
 
 /** How the board should render itself, resolved from a player's stored preferences. */
@@ -150,6 +163,6 @@ export function resolveBoardPrefs(prefs: GuestPrefs | null | undefined): BoardPr
 	const palette = resolvePalette(prefs?.palette);
 	return {
 		palette,
-		regionLabels: palette.id === CVD_PALETTE_ID && prefs?.regionLabels === true
+		regionLabels: isAccessibilityPalette(palette) && prefs?.regionLabels === true
 	};
 }
