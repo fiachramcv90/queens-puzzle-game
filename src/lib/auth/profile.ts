@@ -46,6 +46,17 @@ export function shouldPromptNameConfirm(
 	return profile !== null && !profile.nameConfirmed && context === 'social';
 }
 
+/**
+ * Whether a typed name may be submitted to {@link confirmDisplayName}. `display_name`
+ * is NOT NULL but would happily hold `''`, so the one rule the confirm enforces is that
+ * something visible survives the trim — a player may edit their seeded name, never
+ * erase it. Length is not policed here: the column carries no limit, and inventing one
+ * would be a spec decision.
+ */
+export function isConfirmableDisplayName(displayName: string): boolean {
+	return displayName.trim().length > 0;
+}
+
 /** Project the pref-bearing columns of a profile into the client's `GuestPrefs` shape. */
 export function profileToPrefs(profile: Profile): GuestPrefs {
 	return {

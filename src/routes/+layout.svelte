@@ -33,9 +33,15 @@
 	 * The site nav, owned here rather than repeated per route. Adding a destination (the
 	 * leaderboard, friends) is one edit in one file — before this, each page listed the
 	 * others and a new link meant touching every route.
+	 *
+	 * Ordered by how often a player reaches for each one. Leaderboard sits second, right
+	 * behind Today, because it is part of the daily loop: solve the daily, then see where
+	 * that time landed. Archive and History are the occasional visits — a past daily, or
+	 * a look back at the streak — so they stay behind it.
 	 */
 	const LINKS = [
 		{ id: '/', label: 'Today' },
+		{ id: '/leaderboard', label: 'Leaderboard' },
 		{ id: '/archive', label: 'Archive' },
 		{ id: '/history', label: 'History' }
 	] as const;
