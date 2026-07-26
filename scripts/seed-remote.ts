@@ -64,6 +64,21 @@ function shiftDate(from: string, offset: number): string {
 }
 
 /**
+ * The RNG seed for a date: its own `YYYYMMDD` as an integer.
+ *
+ * Derived from the date rather than from a position in the window, for two reasons. It is
+ * stable — the same date always regenerates the same board, whatever window it is seeded
+ * in — and it occupies a numeric range that cannot collide with the small hand-picked
+ * seeds (1001–1006) the original local seed script used. A collision there is not
+ * cosmetic: identical (size, seed) inputs regenerate an identical board, whose canonical
+ * hash matches a puzzle that is already scheduled, and `puzzle_schedule.puzzle_id` is
+ * unique because a puzzle may be scheduled at most once.
+ */
+function seedForDate(date: string): number {
+	return Number(date.replaceAll('-', ''));
+}
+
+/**
  * The continuous window of dates to seed, oldest first. Anchored on today's Dublin date
  * via `dublinDate` — the client mirror of SQL `dublin_today()` — because PostgREST
  * cannot call the SQL function for us the way the local seed's `insert … values` does.
@@ -71,11 +86,11 @@ function shiftDate(from: string, offset: number): string {
 function buildEntries(): SeedEntry[] {
 	const today = dublinDate();
 	return Array.from({ length: PAST_DAYS + FUTURE_DAYS + 1 }, (_unused, i): SeedEntry => {
-		const daysAgo = PAST_DAYS - i;
+		const date = shiftDate(today, -(PAST_DAYS - i));
 		return {
-			date: shiftDate(today, -daysAgo),
+			date,
 			size: SIZE_RAMP[i % SIZE_RAMP.length],
-			seed: 1000 + (daysAgo + FUTURE_DAYS + 1)
+			seed: seedForDate(date)
 		};
 	});
 }
@@ -119,6 +134,57 @@ async function insertPuzzle(db: SupabaseClient, puzzle: GeneratedPuzzle): Promis
 	}
 
 	return id;
+}
+
+/**
+ * Whether `puzzleId` already holds a schedule slot. A puzzle is scheduled at most once
+ * (`puzzle_schedule.puzzle_id` is unique — the guarantee that a returning player never
+ * gets a board they have already solved), so a board that is already scheduled can never
+ * be reused for another date, however well its canonical hash matches.
+ */
+async function isPuzzleScheduled(db: SupabaseClient, puzzleId: string): Promise<boolean> {
+	const { data, error } = await db
+		.from('puzzle_schedule')
+		.select('date')
+		.eq('puzzle_id', puzzleId)
+		.maybeSingle();
+	if (error) throw new Error(`schedule read failed: ${error.message}`);
+	return data !== null;
+}
+
+/** How many boards to try for one date before giving up. */
+const MAX_BOARD_ATTEMPTS = 5;
+
+/**
+ * A puzzle ready to be scheduled for `entry.date`: an existing board with the same
+ * canonical hash when that board is still unscheduled, otherwise a freshly inserted one.
+ *
+ * The loop exists for the one case that must not become a hard failure — the regenerated
+ * board's hash matches a puzzle that is ALREADY scheduled on another date. Reusing it
+ * would violate the unique `puzzle_id`, and skipping the date would silently leave the
+ * gap we are here to close, so we perturb the seed and generate a genuinely different
+ * board instead.
+ */
+async function puzzleForDate(
+	db: SupabaseClient,
+	entry: SeedEntry
+): Promise<{ id: string; puzzle: GeneratedPuzzle; reused: boolean }> {
+	for (let attempt = 0; attempt < MAX_BOARD_ATTEMPTS; attempt++) {
+		// A prime stride, so a perturbed seed lands far from any other date's seed.
+		const puzzle = generatePuzzle(entry.size, { seed: entry.seed + attempt * 7919 });
+		const existing = await existingPuzzleId(db, puzzle.secret.hash);
+
+		if (existing === null) {
+			return { id: await insertPuzzle(db, puzzle), puzzle, reused: false };
+		}
+		if (!(await isPuzzleScheduled(db, existing))) {
+			return { id: existing, puzzle, reused: true };
+		}
+		// That board is spoken for by another date; try a different one.
+	}
+	throw new Error(
+		`could not find an unscheduled board for ${entry.date} in ${MAX_BOARD_ATTEMPTS} attempts`
+	);
 }
 
 /** Whether a daily is already scheduled for `date`. */
@@ -165,9 +231,7 @@ async function main(): Promise<void> {
 			continue;
 		}
 
-		const puzzle = generatePuzzle(entry.size, { seed: entry.seed });
-		const reused = await existingPuzzleId(db, puzzle.secret.hash);
-		const puzzleId = reused ?? (await insertPuzzle(db, puzzle));
+		const { id: puzzleId, puzzle, reused } = await puzzleForDate(db, entry);
 		await scheduleDate(db, entry.date, puzzleId);
 
 		console.log(
