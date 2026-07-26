@@ -411,17 +411,18 @@ describe('friends_leaderboard', () => {
 		hintsUsed?: number;
 		stale?: boolean;
 		attemptNo?: number;
+		replay?: boolean;
 	}): Promise<void> {
 		const startedAt = sql`(public.dublin_today() - ${OFFSET_DAYS}::int)::timestamptz + interval '9 hours'`;
 		await sql`
       insert into public.plays
         (user_id, puzzle_id, puzzle_date, attempt_no, started_at, completed_at,
-         elapsed_ms, mistakes, assisted, hints_used, stale, unverified)
+         elapsed_ms, mistakes, assisted, hints_used, stale, unverified, replay)
       values (
         ${opts.userId}, ${PUZZLE_ID}, public.dublin_today() - ${OFFSET_DAYS}::int,
         ${opts.attemptNo ?? 1}, ${startedAt}, ${startedAt},
         ${opts.elapsedMs}, ${1}, ${opts.assisted ?? false}, ${opts.hintsUsed ?? 0},
-        ${opts.stale ?? false}, false
+        ${opts.stale ?? false}, false, ${opts.replay ?? false}
       )
     `;
 	}
@@ -506,16 +507,55 @@ describe('friends_leaderboard', () => {
 		expect(globalRows.map((r) => r.display_name)).not.toContain('assist-friend');
 	});
 
-	test('excludes a stale play and a later attempt', async () => {
+	test('excludes a stale play and a replay', async () => {
 		const me = await user('excl-me');
 		const friend = await user('excl-friend');
 		await befriend(me, friend);
 		await insertSolve({ userId: friend, elapsedMs: 20_000, stale: true });
-		await insertSolve({ userId: friend, elapsedMs: 21_000, attemptNo: 2 });
+		// A replay carries BOTH the flag and the later attempt number, the way
+		// complete_play writes it: a second completed attempt at an already-solved
+		// daily. The flag is what disqualifies it (#51), not the attempt number.
+		await insertSolve({ userId: friend, elapsedMs: 21_000, attemptNo: 2, replay: true });
 
 		const date = await boardDate();
 		const rows = await as(me, (tx) => tx`select * from public.friends_leaderboard(${date}::date)`);
 		expect(rows).toHaveLength(0);
+	});
+
+	/**
+	 * The #51 case: `replay`, not `attempt_no`, decides a later attempt on BOTH boards.
+	 *
+	 * A merged solve is the one that made the two rules disagree. `merge_guest_plays`
+	 * renumbers attempt_no as max(account's) + rn, so a guest's clean solve folded onto
+	 * an account that had merely OPENED that daily lands at attempt_no = 2 with
+	 * replay = false — a first completed play wearing a second attempt number. It must
+	 * rank, and it must rank identically on both boards; the friends board previously
+	 * filtered `attempt_no = 1` and dropped it while the global board kept it.
+	 */
+	test('a first completed play at attempt_no 2 ranks on both boards', async () => {
+		const me = await user('merged-me');
+		const friend = await user('merged-friend');
+		await befriend(me, friend);
+		await insertSolve({ userId: friend, elapsedMs: 41_000, attemptNo: 2, replay: false });
+
+		const date = await boardDate();
+		const rows = await as(
+			me,
+			(tx) => tx<{ user_id: string }[]>`
+        select * from public.friends_leaderboard(${date}::date)
+      `
+		);
+		expect(rows.map((r) => r.user_id)).toContain(friend);
+
+		// The global board reads ranked_plays, which already filtered on `not replay`.
+		// Asserting both here is the point: one solve, one answer.
+		const globalRows = await as(
+			me,
+			(tx) => tx<{ display_name: string }[]>`
+        select * from public.global_leaderboard(${date}::date, 100, 0)
+      `
+		);
+		expect(globalRows.map((r) => r.display_name)).toContain('merged-friend');
 	});
 
 	test('never returns a non-friend, a pending request, or a blocked user', async () => {
