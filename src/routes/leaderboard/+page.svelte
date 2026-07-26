@@ -139,23 +139,30 @@
 	</ol>
 
 	<nav class="paging" aria-label="Board pages">
-		<button type="button" disabled={page === 0} onclick={() => loadPage(page - 1)}>Previous</button>
+		<button
+			class="btn btn-sm"
+			type="button"
+			disabled={page === 0}
+			onclick={() => loadPage(page - 1)}>Previous</button
+		>
 		<span class="page">Page {page + 1}</span>
-		<button type="button" disabled={!hasNext} onclick={() => loadPage(page + 1)}>Next</button>
+		<button class="btn btn-sm" type="button" disabled={!hasNext} onclick={() => loadPage(page + 1)}
+			>Next</button
+		>
 	</nav>
 {/if}
 
 <style>
 	.intro {
-		color: #666;
+		color: var(--text-muted);
 		font-size: 0.9rem;
 	}
 
 	.standing {
 		margin: 1rem 0 1.5rem;
 		padding: 0.75rem 1rem;
-		border-radius: 0.5rem;
-		background: #f4f2ec;
+		border-radius: var(--radius);
+		background: var(--surface);
 	}
 
 	.times {
@@ -165,8 +172,8 @@
 
 	.reason {
 		margin: 0.25rem 0 0;
-		font-size: 0.85rem;
-		color: #666;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 	}
 
 	.board {
@@ -182,17 +189,17 @@
 		gap: 0.75rem;
 		align-items: baseline;
 		padding: 0.6rem 0.25rem;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+		border-bottom: 1px solid var(--border);
 	}
 
 	.entry.you {
-		background: #eef6f2;
-		border-radius: 0.35rem;
+		background: var(--accent-surface);
+		border-radius: var(--radius-sm);
 	}
 
 	.rank {
 		font-variant-numeric: tabular-nums;
-		color: #666;
+		color: var(--text-muted);
 		text-align: right;
 	}
 
@@ -204,21 +211,21 @@
 	.tag {
 		margin-left: 0.4rem;
 		padding: 0.05rem 0.4rem;
-		border-radius: 0.4rem;
-		background: #0f6e56;
-		color: #fff;
+		border-radius: var(--radius-sm);
+		background: var(--accent);
+		color: var(--accent-ink);
 		font-size: 0.7rem;
 		font-weight: 600;
 	}
 
 	.detail {
-		color: #666;
-		font-size: 0.85rem;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
 	}
 
 	.time {
 		font-variant-numeric: tabular-nums;
-		color: #0f6e56;
+		color: var(--accent);
 		font-weight: 600;
 	}
 
@@ -229,45 +236,8 @@
 		margin-top: 1rem;
 	}
 
-	.paging button {
-		font: inherit;
-		padding: 0.35rem 0.9rem;
-		border-radius: 0.4rem;
-		border: 1px solid rgba(0, 0, 0, 0.2);
-		background: transparent;
-		color: inherit;
-		cursor: pointer;
-	}
-
-	.paging button:disabled {
-		opacity: 0.45;
-		cursor: default;
-	}
-
 	.page {
-		font-size: 0.85rem;
-		color: #666;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.intro,
-		.reason,
-		.detail,
-		.rank,
-		.page {
-			color: #aaa;
-		}
-		.standing {
-			background: #23231f;
-		}
-		.entry {
-			border-bottom-color: rgba(255, 255, 255, 0.12);
-		}
-		.entry.you {
-			background: #1c2a25;
-		}
-		.paging button {
-			border-color: rgba(255, 255, 255, 0.25);
-		}
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 	}
 </style>

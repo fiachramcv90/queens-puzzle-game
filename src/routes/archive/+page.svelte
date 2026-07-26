@@ -65,7 +65,7 @@
 
 <style>
 	.intro {
-		color: #666;
+		color: var(--text-muted);
 		font-size: 0.9rem;
 		margin: 0 0 1rem;
 	}
@@ -81,7 +81,7 @@
 		align-items: baseline;
 		gap: 0.75rem;
 		padding: 0.7rem 0;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+		border-bottom: 1px solid var(--border);
 		text-decoration: none;
 		color: inherit;
 	}
@@ -95,39 +95,21 @@
 	}
 
 	.tier {
-		color: #666;
+		color: var(--text-muted);
 		font-size: 0.9rem;
 	}
 
 	.tag {
 		margin-left: auto;
 		padding: 0.05rem 0.4rem;
-		border-radius: 0.4rem;
+		border-radius: var(--radius-sm);
 		font-size: 0.75rem;
-		background: #f0ede6;
-		color: #6b5f3f;
+		background: var(--warm-surface);
+		color: var(--warm-ink);
 	}
 	.tag.solved {
 		margin-left: 0;
-		background: #dff0e8;
-		color: #0f6e56;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.entry a {
-			border-bottom-color: rgba(255, 255, 255, 0.12);
-		}
-		.intro,
-		.tier {
-			color: #aaa;
-		}
-		.tag {
-			background: #2a2822;
-			color: #cdbb8a;
-		}
-		.tag.solved {
-			background: #163a2c;
-			color: #7fd6b0;
-		}
+		background: var(--accent-surface);
+		color: var(--accent);
 	}
 </style>

@@ -143,6 +143,8 @@ Deno.serve(async (req) => {
 		unverified: boolean;
 		replay: boolean;
 		attempt_no: number;
+		assisted: boolean;
+		hints_used: number;
 		completed_at: string;
 	};
 
@@ -154,6 +156,10 @@ Deno.serve(async (req) => {
 		unverified: play.unverified,
 		replay: play.replay,
 		attemptNo: play.attempt_no,
+		// Echoed from the row, never from the request: the submit payload has no say
+		// in whether the play was assisted.
+		assisted: play.assisted,
+		hintsUsed: play.hints_used,
 		completedAt: play.completed_at
 	});
 });

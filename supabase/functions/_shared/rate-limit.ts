@@ -15,8 +15,15 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { rateLimits } from './config.bundle.js';
 import { json } from './http.ts';
 
-/** The actions that carry a per-identity cap. `heartbeat` is unlimited by design. */
-export type LimitedAction = 'start' | 'submit';
+/**
+ * The actions that carry a cap. `heartbeat` is unlimited by design.
+ *
+ * `start` and `submit` are capped per IDENTITY; `reveal` is capped per PLAY, since
+ * the burst it defends against — walking the whole solution out of the oracle — is
+ * per-play. The caller passes whichever key applies, so this type names the action
+ * only.
+ */
+export type LimitedAction = 'start' | 'submit' | 'reveal';
 
 /**
  * Charge one request against `(action, identity)` and, if it is over the configured

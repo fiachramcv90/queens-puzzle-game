@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import type { Board } from '$lib/solver';
-import { createEmptyBoard, nextTapState, setCell, tapCell, toggleXCell, sweepX } from './board';
+import {
+	createEmptyBoard,
+	nextFocus,
+	nextTapState,
+	setCell,
+	tapCell,
+	toggleXCell,
+	sweepX
+} from './board';
 
 describe('createEmptyBoard', () => {
 	it('is N×N and all empty', () => {
@@ -97,5 +105,56 @@ describe('sweepX — the touch drag that bulk-marks a row', () => {
 	it('is a no-op on an empty sweep', () => {
 		const board: Board = createEmptyBoard(2);
 		expect(sweepX(board, [])).toEqual(board);
+	});
+});
+
+describe('nextFocus — keyboard navigation across the grid', () => {
+	const middle = { row: 2, col: 2 };
+
+	it('moves one cell per arrow key', () => {
+		expect(nextFocus(middle, 'ArrowUp', 5)).toEqual({ row: 1, col: 2 });
+		expect(nextFocus(middle, 'ArrowDown', 5)).toEqual({ row: 3, col: 2 });
+		expect(nextFocus(middle, 'ArrowLeft', 5)).toEqual({ row: 2, col: 1 });
+		expect(nextFocus(middle, 'ArrowRight', 5)).toEqual({ row: 2, col: 3 });
+	});
+
+	// Clamping rather than wrapping: on a board where each row and column holds
+	// exactly one queen, silently crossing from the last column to the next row
+	// would move the player across a boundary the puzzle cares about.
+	it('clamps at every edge instead of wrapping', () => {
+		expect(nextFocus({ row: 0, col: 0 }, 'ArrowUp', 5)).toEqual({ row: 0, col: 0 });
+		expect(nextFocus({ row: 0, col: 0 }, 'ArrowLeft', 5)).toEqual({ row: 0, col: 0 });
+		expect(nextFocus({ row: 4, col: 4 }, 'ArrowDown', 5)).toEqual({ row: 4, col: 4 });
+		expect(nextFocus({ row: 4, col: 4 }, 'ArrowRight', 5)).toEqual({ row: 4, col: 4 });
+	});
+
+	it('sends Home and End to the ends of the current row', () => {
+		expect(nextFocus(middle, 'Home', 5)).toEqual({ row: 2, col: 0 });
+		expect(nextFocus(middle, 'End', 5)).toEqual({ row: 2, col: 4 });
+	});
+
+	it('sends Ctrl+Home and Ctrl+End to the board corners', () => {
+		expect(nextFocus(middle, 'Home', 5, { ctrlKey: true })).toEqual({ row: 0, col: 0 });
+		expect(nextFocus(middle, 'End', 5, { ctrlKey: true })).toEqual({ row: 4, col: 4 });
+	});
+
+	it('sends PageUp and PageDown to the ends of the current column', () => {
+		expect(nextFocus(middle, 'PageUp', 5)).toEqual({ row: 0, col: 2 });
+		expect(nextFocus(middle, 'PageDown', 5)).toEqual({ row: 4, col: 2 });
+	});
+
+	// Null is how the component knows to leave the event alone, so a key it does not
+	// handle still does whatever the browser would normally do with it.
+	it('returns null for a key it does not handle', () => {
+		expect(nextFocus(middle, 'a', 5)).toBeNull();
+		expect(nextFocus(middle, 'Tab', 5)).toBeNull();
+		expect(nextFocus(middle, ' ', 5)).toBeNull();
+		expect(nextFocus(middle, 'Enter', 5)).toBeNull();
+	});
+
+	it('works on the smallest and largest real boards', () => {
+		expect(nextFocus({ row: 0, col: 0 }, 'ArrowRight', 7)).toEqual({ row: 0, col: 1 });
+		expect(nextFocus({ row: 10, col: 10 }, 'ArrowRight', 11)).toEqual({ row: 10, col: 10 });
+		expect(nextFocus({ row: 5, col: 5 }, 'End', 11)).toEqual({ row: 5, col: 10 });
 	});
 });

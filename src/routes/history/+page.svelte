@@ -94,7 +94,7 @@
 
 	.entry {
 		padding: 0.75rem 0;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+		border-bottom: 1px solid var(--border);
 	}
 
 	.row {
@@ -111,14 +111,14 @@
 
 	.time {
 		font-variant-numeric: tabular-nums;
-		color: #0f6e56;
+		color: var(--accent);
 		font-weight: 600;
 	}
 
 	.detail {
 		margin-top: 0.15rem;
-		color: #666;
-		font-size: 0.85rem;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.35rem;
@@ -127,22 +127,9 @@
 
 	.tag {
 		padding: 0.05rem 0.4rem;
-		border-radius: 0.4rem;
-		background: #f0ede6;
-		color: #6b5f3f;
+		border-radius: var(--radius-sm);
+		background: var(--warm-surface);
+		color: var(--warm-ink);
 		font-size: 0.75rem;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.entry {
-			border-bottom-color: rgba(255, 255, 255, 0.12);
-		}
-		.detail {
-			color: #aaa;
-		}
-		.tag {
-			background: #2a2822;
-			color: #cdbb8a;
-		}
 	}
 </style>

@@ -12,6 +12,7 @@
 	import { heartbeat } from '$lib/config';
 	import Board from '$lib/components/Board.svelte';
 	import BoardSettings from '$lib/components/BoardSettings.svelte';
+	import HintPanel from '$lib/components/HintPanel.svelte';
 	import StreakBadge from '$lib/components/StreakBadge.svelte';
 	import { AUTH_CONTEXT, type AuthContext } from '$lib/auth/context';
 	import { computeStreak, dublinToday, viewStreak } from '$lib/streak/streak';
@@ -85,6 +86,12 @@
 
 		prefs = blob?.prefs ?? {};
 		solvedDates = blob?.solvedDates ?? [];
+
+		// The auto-mark-X PREFERENCE carries across days, but it must not switch itself
+		// on for a fresh play: that would silently charge `assisted` for a choice the
+		// player made yesterday. A restored play keeps whatever it was running with; a
+		// new play starts clean and the player opts in again through the hint panel.
+		if (restored?.autoMarkX) game.setAutoMarkX(true);
 		// A restored, already-solved TODAY play still belongs to its day's streak.
 		if (
 			game.result &&
@@ -217,6 +224,13 @@
 
 	<BoardSettings {prefs} onChange={changePrefs} />
 
+	<!-- Hints are offered only while the play is live. After the result screen there is
+	     nothing left to help with, and a "reveal" control beside a finished solve would
+	     read as an invitation to redo it. -->
+	{#if !game.result}
+		<HintPanel {game} onAutoMarkXChange={(on) => changePrefs({ autoMarkX: on })} />
+	{/if}
+
 	<div
 		class="board-wrap"
 		style={`--cell-size: min(2.75rem, calc((100vw - 2.5rem) / ${game.size}))`}
@@ -225,6 +239,7 @@
 			regionMap={game.regionMap}
 			board={game.board}
 			conflicts={game.conflicts}
+			flagged={game.flagged}
 			palette={boardPrefs.palette}
 			regionLabels={boardPrefs.regionLabels}
 			onTap={(row, col) => game?.tap(row, col)}
@@ -249,6 +264,12 @@
 			{:else if game.result.replay}
 				<p class="badge">Replay — practice, not ranked</p>
 			{/if}
+			{#if game.result.assisted}
+				<p class="badge">
+					Assisted — {game.result.hintsUsed}
+					{game.result.hintsUsed === 1 ? 'hint' : 'hints'} used, not ranked
+				</p>
+			{/if}
 			{#if game.result.stale}
 				<p class="badge">Idle too long — counts, but out of ranking</p>
 			{/if}
@@ -270,7 +291,8 @@
 		<p class="status">{game.queenCount}/{game.size} queens placed</p>
 	{/if}
 	<p class="hint">
-		Tap to cycle X → queen. Drag across empty cells to sweep X's. Right-click for a quick X.
+		Tap to cycle X → queen. Drag across empty cells to sweep X's. Right-click for a quick X. Or use
+		the keyboard: arrow keys to move, <kbd>Space</kbd> to cycle, <kbd>X</kbd> to mark.
 	</p>
 {/if}
 
@@ -291,20 +313,20 @@
 	.timer {
 		font-variant-numeric: tabular-nums;
 		font-size: 1.05rem;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.timer.solved {
-		color: #0f6e56;
+		color: var(--accent);
 		font-weight: 600;
 	}
 
 	.archive-note {
 		margin: 0 0 0.75rem;
 		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		background: #f0ede6;
-		color: #6b5f3f;
-		font-size: 0.85rem;
+		border-radius: var(--radius);
+		background: var(--warm-surface);
+		color: var(--warm-ink);
+		font-size: var(--text-sm);
 	}
 
 	.board-wrap {
@@ -316,52 +338,51 @@
 		margin: 0.5rem 0 0.25rem;
 	}
 	.status.won {
-		color: #0f6e56;
+		color: var(--accent);
 	}
 
+	/* The post-solve panel. It is the payoff for the whole session, so it reads as a
+	   result card rather than three stacked paragraphs. */
 	.result {
-		margin: 0.5rem 0 0.25rem;
+		margin: var(--space-3) 0 var(--space-2);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius);
+		background: var(--accent-surface);
 	}
 	.result-headline {
 		font-weight: 700;
-		font-size: 1.15rem;
-		color: #0f6e56;
+		font-size: var(--text-lg);
+		color: var(--accent);
 		margin: 0 0 0.15rem;
 	}
 	.result-detail {
 		margin: 0;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.badge {
 		display: inline-block;
 		margin: 0.4rem 0.4rem 0 0;
 		padding: 0.15rem 0.5rem;
-		border-radius: 0.5rem;
-		background: #f0ede6;
-		color: #6b5f3f;
-		font-size: 0.8rem;
+		border-radius: var(--radius);
+		background: var(--warm-surface);
+		color: var(--warm-ink);
+		font-size: var(--text-xs);
 	}
 
 	.hint {
-		color: #888;
-		font-size: 0.85rem;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
 		margin: 0.25rem 0 0;
 	}
 
-	@media (prefers-color-scheme: dark) {
-		.timer {
-			color: #aaa;
-		}
-		.hint {
-			color: #999;
-		}
-		.result-detail {
-			color: #aaa;
-		}
-		.badge,
-		.archive-note {
-			background: #2a2822;
-			color: #cdbb8a;
-		}
+	.hint kbd {
+		font: inherit;
+		font-size: 0.95em;
+		padding: 0.05rem 0.3rem;
+		border: 1px solid var(--border);
+		border-radius: 0.25rem;
+		background: var(--surface);
 	}
 </style>

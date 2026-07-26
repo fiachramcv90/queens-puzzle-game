@@ -119,6 +119,7 @@
 			<label for="name-confirm-input">Display name</label>
 			<input
 				id="name-confirm-input"
+				class="field"
 				type="text"
 				bind:this={input}
 				bind:value={name}
@@ -126,24 +127,30 @@
 				required
 			/>
 			<div class="actions">
-				<button type="submit" disabled={busy || !isConfirmableDisplayName(name)}>
-					Use this name
+				<button
+					class="btn btn-primary"
+					type="submit"
+					disabled={busy || !isConfirmableDisplayName(name)}
+				>
+					{busy ? 'Saving…' : 'Use this name'}
 				</button>
-				<button type="button" onclick={() => (dismissed = true)} disabled={busy}> Not now </button>
+				<button class="btn" type="button" onclick={() => (dismissed = true)} disabled={busy}>
+					Not now
+				</button>
 			</div>
 		</form>
 
-		{#if errorMessage}<p class="error">{errorMessage}</p>{/if}
+		{#if errorMessage}<p class="form-error">{errorMessage}</p>{/if}
 	</section>
 {/if}
 
 <style>
 	.confirm {
-		margin: 0 0 1.5rem;
+		margin: 0 0 var(--space-5);
 		padding: 0.9rem 1rem 1rem;
-		border-radius: 0.5rem;
-		border: 1px solid rgba(0, 0, 0, 0.15);
-		background: #f4f2ec;
+		border-radius: var(--radius);
+		border: 1px solid var(--border);
+		background: var(--surface);
 	}
 
 	h2 {
@@ -153,8 +160,8 @@
 
 	.why {
 		margin: 0.35rem 0 0.75rem;
-		font-size: 0.85rem;
-		color: #666;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 	}
 
 	label {
@@ -167,60 +174,14 @@
 	}
 
 	input {
-		font: inherit;
 		width: 100%;
 		margin-top: 0.25rem;
-		padding: 0.4rem 0.6rem;
-		border-radius: 0.4rem;
-		border: 1px solid rgba(0, 0, 0, 0.25);
-		background: transparent;
-		color: inherit;
 	}
 
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-top: 0.75rem;
-	}
-
-	.actions button {
-		font: inherit;
-		padding: 0.35rem 0.9rem;
-		border-radius: 0.4rem;
-		border: 1px solid rgba(0, 0, 0, 0.2);
-		background: transparent;
-		color: inherit;
-		cursor: pointer;
-	}
-
-	.actions button:disabled {
-		opacity: 0.45;
-		cursor: default;
-	}
-
-	.error {
-		margin: 0.6rem 0 0;
-		font-size: 0.85rem;
-		color: #b00020;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.confirm {
-			background: #23231f;
-			border-color: rgba(255, 255, 255, 0.15);
-		}
-		.why {
-			color: #aaa;
-		}
-		input {
-			border-color: rgba(255, 255, 255, 0.25);
-		}
-		.actions button {
-			border-color: rgba(255, 255, 255, 0.25);
-		}
-		.error {
-			color: #ff8a80;
-		}
+		gap: var(--space-2);
+		margin-top: var(--space-3);
 	}
 </style>

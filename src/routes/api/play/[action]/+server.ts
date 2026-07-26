@@ -1,7 +1,7 @@
 /**
  * The same-origin proxy in front of the play Edge Functions.
  *
- * The client calls `/api/play/start|heartbeat|submit` on its own origin; this
+ * The client calls `/api/play/start|heartbeat|submit|reveal|assist` on its own origin; this
  * forwards each to the matching Supabase Edge Function. Two reasons it exists
  * rather than the client calling Supabase directly:
  *
@@ -20,7 +20,7 @@ import type { RequestHandler } from './$types';
 import { publicSupabaseEnv } from '$lib/supabase/env';
 
 /** The Edge Functions this proxy is willing to forward to. */
-const ACTIONS = new Set(['start', 'heartbeat', 'submit', 'merge']);
+const ACTIONS = new Set(['start', 'heartbeat', 'submit', 'merge', 'reveal', 'assist']);
 
 export const POST: RequestHandler = async ({ params, request, fetch }) => {
 	if (!ACTIONS.has(params.action)) {

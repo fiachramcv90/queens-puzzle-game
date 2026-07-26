@@ -24,7 +24,9 @@ const result: PlayResult = {
 	stale: false,
 	unverified: false,
 	replay: true,
-	attemptNo: 3
+	attemptNo: 3,
+	assisted: false,
+	hintsUsed: 0
 };
 
 describe('recordFromResult', () => {
