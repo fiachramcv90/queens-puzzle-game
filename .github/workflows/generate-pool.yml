@@ -1,0 +1,99 @@
+name: Generate pool
+
+# The generation pipeline (#32). Keeps `puzzle_schedule` topped up ~90 days ahead so the
+# pool is generated OFFLINE and never on the request path — no player ever waits on a
+# generator.
+#
+# Weekly on a cron, plus manual dispatch so the operator can refill or curate without
+# waiting for the cron. Runnable from a phone: GitHub mobile app / web → Actions → this
+# workflow → "Run workflow". No terminal needed.
+#
+# It fails LOUDLY when schedule runway drops below the 30-day watermark, so a starving
+# pool is discovered with a month to spare rather than on the morning it empties. Both
+# numbers live in `src/lib/config` (`pool.horizonDays`, `pool.loudFailWatermarkDays`) and
+# are only overridden here when an operator deliberately types something else.
+#
+# It writes over the REST API with the service_role key, so NO database password or
+# connection string is involved — a hosted project's direct database host is IPv6-only
+# (unreachable from a runner) and the pooler route needs a DB password, both of which
+# this sidesteps entirely.
+#
+# One-time setup: two repository secrets (Settings → Secrets and variables → Actions):
+#   * SUPABASE_SECRET_KEY — the service_role / secret API key. Supabase dashboard →
+#     Project Settings → API keys. This is the same key the deployment already uses;
+#     docs/deployment.md notes it is the one credential this repo's automation holds.
+#     It is a secret precisely because it bypasses RLS — it must never reach a client
+#     bundle (see src/lib/server/supabase-env.ts).
+#   * PUBLIC_SUPABASE_URL — the project URL, e.g. https://<ref>.supabase.co (same page).
+#
+# The run is idempotent: it only inserts missing puzzles and schedule rows, never updates
+# or deletes, so re-running is safe and only fills gaps.
+#
+# This supersedes the interim `seed-production.yml`.
+
+on:
+  schedule:
+    # Weekly, Mondays at 03:00 UTC — well clear of the Europe/Dublin midnight rollover in
+    # either half of the year, so a run never races the daily flipping over.
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report what would be scheduled without writing anything'
+        type: boolean
+        required: false
+        default: false
+      horizon_days:
+        description: 'Days of runway to keep ahead (blank = the pool.horizonDays default)'
+        required: false
+        default: ''
+      backfill_past_days:
+        description: 'Archive days behind today to fill as well (blank or 0 = none)'
+        required: false
+        default: ''
+
+# Never let two runs race against the same database.
+concurrency:
+  group: generate-pool
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Top the pool up to the horizon
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check the secrets are configured
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+        run: |
+          missing=""
+          [ -z "$SUPABASE_SECRET_KEY" ] && missing="$missing SUPABASE_SECRET_KEY"
+          [ -z "$PUBLIC_SUPABASE_URL" ] && missing="$missing PUBLIC_SUPABASE_URL"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing. Add them under Settings → Secrets and variables → Actions (see this workflow's header for where to find the values)."
+            exit 1
+          fi
+
+      # Runtime is not a concern — counting-to-2 runs in milliseconds and a full pool
+      # takes seconds-to-minutes on one core. A run that hits this cap is a generator bug,
+      # not a reason to add infrastructure.
+      - name: Generate and schedule
+        timeout-minutes: 45
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          POOL_DRY_RUN: ${{ inputs.dry_run }}
+          POOL_HORIZON_DAYS: ${{ inputs.horizon_days }}
+          POOL_BACKFILL_PAST_DAYS: ${{ inputs.backfill_past_days }}
+        run: npm run seed:remote

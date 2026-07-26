@@ -50,12 +50,30 @@ export const heartbeat = {
 	staleAfterMs: 30 * MINUTE
 } as const;
 
-/** The offline puzzle pool — see "Generation pipeline" in the build spec. */
+/**
+ * The offline puzzle pool — see "Generation pipeline" in the build spec.
+ *
+ * The horizon and the watermark are the operator-facing numbers; the two retry budgets
+ * are the generator-facing ones. All four are tunable: none of them encodes a *rule*
+ * (which tier a date targets is the ramp, in `$lib/pool/ramp.ts`, and that is code).
+ */
 export const pool = {
-	/** How far ahead `puzzle_schedule` is kept. */
+	/** How far ahead `puzzle_schedule` is kept, counting today. */
 	horizonDays: 90,
-	/** Fall below this many scheduled days and the generation job fails loudly. */
-	loudFailWatermarkDays: 30
+	/** Fall below this many scheduled days of runway and the generation job fails loudly. */
+	loudFailWatermarkDays: 30,
+	/**
+	 * How many boards to reject-sample per date while chasing its ramp tier. Generation
+	 * targets a tier but cannot guarantee one on any single draw, so the pipeline samples
+	 * and checks; this bounds that search before the date falls back to an off-tier board.
+	 */
+	tierAttemptsPerDate: 24,
+	/**
+	 * How many distinct boards to try per date when the ones generated keep colliding with
+	 * the canonical hash of an already-scheduled puzzle. A puzzle is scheduled at most once
+	 * — the no-repeat guard — so a collision means generating a genuinely different board.
+	 */
+	boardAttemptsPerDate: 8
 } as const;
 
 /** How long data we don't keep forever survives. */

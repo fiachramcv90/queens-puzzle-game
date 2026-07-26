@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { LEGACY_SEEDS, buildSeedWindow, seedForDate, shiftDate } from './seed-window';
+import { rampSlotForDate } from './ramp';
+import { LEGACY_SEEDS, buildSeedWindow, entryParams, seedForDate, shiftDate } from './seed-window';
 
 /**
  * The seed window — the shared input both seed scripts build their dailies from.
@@ -94,6 +95,20 @@ describe('buildSeedWindow', () => {
 			'2027-01-01',
 			'2027-01-02'
 		]);
+	});
+
+	test('every date takes its (tier, size) from the weekly ramp', () => {
+		for (const entry of window) {
+			const slot = rampSlotForDate(entry.date);
+			expect(entry.tier).toBe(slot.tier);
+			expect(entry.size).toBe(slot.size);
+		}
+	});
+
+	test('a date keeps its board parameters regardless of which window it appears in', () => {
+		const wide = buildSeedWindow({ today: '2026-07-26', pastDays: 40, futureDays: 40 });
+		const entry = wide.find((e) => e.date === '2026-08-07');
+		expect(entry).toEqual({ date: '2026-08-07', ...entryParams('2026-08-07') });
 	});
 
 	test('a date keeps its seed regardless of which window it appears in', () => {

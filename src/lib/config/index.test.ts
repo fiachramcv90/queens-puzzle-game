@@ -25,6 +25,11 @@ describe('pool', () => {
 		expect(pool.loudFailWatermarkDays).toBeLessThan(pool.horizonDays);
 		expect(pool.loudFailWatermarkDays).toBeGreaterThan(0);
 	});
+
+	it('gives the generator room to reject-sample and to dodge a hash collision', () => {
+		expect(pool.tierAttemptsPerDate).toBeGreaterThan(1);
+		expect(pool.boardAttemptsPerDate).toBeGreaterThan(1);
+	});
 });
 
 describe('heartbeat', () => {

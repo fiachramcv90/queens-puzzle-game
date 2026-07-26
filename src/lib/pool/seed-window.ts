@@ -12,16 +12,15 @@
  * the window spans a past run (for the archive) and a future run (for runway), gap-free,
  * always including today.
  *
- * This is the interim stand-in for the generation pipeline (issue #32), which will keep
- * the schedule ~90 days ahead on a cron; it is expected to consume this same window.
+ * The generation pipeline (issue #32) keeps the schedule ~90 days ahead on a cron and
+ * plans its own dates from `./schedule-plan`; this window remains the fixed-width form
+ * the LOCAL seed (`scripts/seed-puzzles.ts`) uses to stand a development database up.
+ * Both take their `(tier, size)` target from the one weekly ramp in `./ramp`, so a date
+ * gets the same slot whichever path fills it.
  */
 
-/**
- * A gentle repeating size ramp so consecutive dailies vary rather than serving one board
- * size for a week. Sizes stay inside the 7–11 range the generator targets, and low enough
- * that seeding a whole window stays quick.
- */
-export const SIZE_RAMP = [7, 7, 8, 8, 9, 9, 10] as const;
+import { rampSlotForDate } from './ramp';
+import type { DifficultyTier } from '$lib/solver';
 
 /**
  * The hand-picked seeds the original local seed script used, recorded so the window can be
@@ -39,7 +38,10 @@ export const LEGACY_SEEDS: readonly number[] = [1001, 1002, 1003, 1004, 1005, 10
 export interface SeedEntry {
 	/** The daily's date, `YYYY-MM-DD` (Europe/Dublin). */
 	readonly date: string;
+	/** The board size the date's ramp slot targets. */
 	readonly size: number;
+	/** The difficulty tier the date's ramp slot targets. */
+	readonly tier: DifficultyTier;
 	/** The generator's RNG seed — see {@link seedForDate}. */
 	readonly seed: number;
 }
@@ -79,16 +81,26 @@ export function seedForDate(date: string): number {
 
 /**
  * The continuous window of dates to seed, oldest first, always including `today`. Each
- * date carries a size from {@link SIZE_RAMP} and its own date-derived seed.
+ * date carries the `(tier, size)` slot its weekday takes on the ramp, plus its own
+ * date-derived seed.
+ *
+ * The slot comes from the date, not from a position in the window, for the same reason
+ * the seed does: it is STABLE. The same date gets the same board parameters whatever
+ * window it is seeded in, so a re-run is genuinely idempotent.
  */
 export function buildSeedWindow(options: SeedWindowOptions): SeedEntry[] {
 	const { today, pastDays, futureDays } = options;
 	return Array.from({ length: pastDays + futureDays + 1 }, (_unused, i): SeedEntry => {
 		const date = shiftDate(today, -(pastDays - i));
-		return {
-			date,
-			size: SIZE_RAMP[i % SIZE_RAMP.length],
-			seed: seedForDate(date)
-		};
+		return { date, ...entryParams(date) };
 	});
+}
+
+/**
+ * The board parameters a date is filled to: its ramp slot plus its date-derived seed.
+ * Shared by the local seed window and the generation pipeline, so the two cannot drift.
+ */
+export function entryParams(date: string): Omit<SeedEntry, 'date'> {
+	const { tier, size } = rampSlotForDate(date);
+	return { size, tier, seed: seedForDate(date) };
 }
