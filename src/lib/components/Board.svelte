@@ -51,6 +51,15 @@
 		palette: Palette;
 		/** Draw the per-region letter on every cell. */
 		regionLabels: boolean;
+		/**
+		 * Stop the board accepting changes. Set once the puzzle is solved: the answer
+		 * is final, and a stray tap on a finished board can only damage it.
+		 *
+		 * Navigation is deliberately still allowed — a keyboard or screen-reader player
+		 * may want to read back the completed board, and locking should mean "you can't
+		 * change this", not "you can't look at it".
+		 */
+		locked?: boolean;
 		onTap: (row: number, col: number) => void;
 		onToggleX: (row: number, col: number) => void;
 		onSweep: (cells: readonly Cell[]) => void;
@@ -63,6 +72,7 @@
 		flagged = [],
 		palette,
 		regionLabels,
+		locked = false,
 		onTap,
 		onToggleX,
 		onSweep
@@ -113,6 +123,7 @@
 	}
 
 	function onPointerDown(event: PointerEvent): void {
+		if (locked) return;
 		// Only the primary button starts a gesture; right-click is handled separately.
 		if (event.button !== 0) return;
 		const cell = cellOf(event.target as Element);
@@ -147,6 +158,7 @@
 	}
 
 	function onContextMenu(event: MouseEvent): void {
+		if (locked) return;
 		const cell = cellOf(event.target as Element);
 		if (!cell) return;
 		event.preventDefault();
@@ -193,6 +205,10 @@
 			return;
 		}
 
+		// Navigation above stays live when locked; everything below MUTATES, so it
+		// stops here. A finished board can still be read, just not edited.
+		if (locked) return;
+
 		switch (event.key) {
 			// The same 3-state cycle a tap performs — one control, one rule, two inputs.
 			case ' ':
@@ -226,6 +242,7 @@
 
 <div
 	class="board"
+	class:locked
 	bind:this={grid}
 	style:grid-template-columns={`repeat(${size}, var(--cell-size))`}
 	onpointerdown={onPointerDown}
@@ -236,7 +253,10 @@
 	onkeydown={onKeyDown}
 	role="grid"
 	tabindex="-1"
-	aria-label="Queens board. Arrow keys move, Space cycles a cell, X marks it."
+	aria-readonly={locked ? 'true' : undefined}
+	aria-label={locked
+		? 'Queens board, solved. Arrow keys move to read the finished board.'
+		: 'Queens board. Arrow keys move, Space cycles a cell, X marks it.'}
 >
 	<!-- role="row" with `display: contents` satisfies the grid pattern's required
 	     row structure without adding a box that would break the single CSS grid the
@@ -313,6 +333,12 @@
 		touch-action: none;
 		user-select: none;
 		-webkit-user-select: none;
+	}
+
+	/* A solved board takes no more input, so it should not invite any: the cell
+	   cursor goes back to the default rather than staying a pointer. */
+	.board.locked .cell {
+		cursor: default;
 	}
 
 	.cell {

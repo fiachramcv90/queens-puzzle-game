@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
 	import AuthPanel from '$lib/components/AuthPanel.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { AuthState } from '$lib/auth/auth-state.svelte';
 	import { AUTH_CONTEXT } from '$lib/auth/context';
 	import '../app.css';
@@ -82,7 +83,10 @@
 		<img src={favicon} alt="" width="28" height="28" />
 		<span>Queens</span>
 	</a>
-	<AuthPanel {auth} />
+	<div class="header-actions">
+		<ThemeToggle />
+		<AuthPanel {auth} />
+	</div>
 </header>
 
 <nav class="links" aria-label="Sections">
@@ -120,6 +124,12 @@
 		justify-content: space-between;
 		gap: var(--space-3);
 		padding-block: var(--space-3);
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
 	}
 
 	.wordmark {
