@@ -24,25 +24,36 @@
 	let standing = $state<OwnStanding | null>(null);
 
 	/**
+	 * The most recent page asked for. Two quick taps on Next start two reads that can
+	 * land in either order, so a stale reply must not overwrite a newer one — only the
+	 * latest request is allowed to paint.
+	 */
+	let requested = 0;
+
+	/**
 	 * Load one page of the board. The board is the daily's, not the player's, so it is
 	 * read even when signed out — a guest sees the same ranking, and holds a real ranked
-	 * play of their own if they solved today cleanly.
+	 * play of their own if they solved today cleanly. Which daily is today's is resolved
+	 * by the server, never by this browser's clock.
 	 */
 	async function loadPage(next: number): Promise<void> {
+		const ticket = ++requested;
 		loaded = false;
 		failed = false;
 		try {
-			const result = await fetchGlobalLeaderboard({ date: today, page: next });
+			const result = await fetchGlobalLeaderboard({ page: next });
+			if (ticket !== requested) return;
 			entries = result.entries;
 			hasNext = result.hasNext;
 			page = next;
 		} catch {
 			// A read failure (offline) shows the empty state rather than a broken page.
+			if (ticket !== requested) return;
 			entries = [];
 			hasNext = false;
 			failed = true;
 		} finally {
-			loaded = true;
+			if (ticket === requested) loaded = true;
 		}
 	}
 

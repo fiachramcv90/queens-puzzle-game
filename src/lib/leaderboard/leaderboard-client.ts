@@ -20,18 +20,21 @@ import {
 } from './leaderboard';
 
 /**
- * Fetch one page of the global board for a daily. `date` defaults to today's daily
- * server-side, so the client never computes the rollover itself.
+ * Fetch one page of the global board.
+ *
+ * The date is NOT a parameter, and that is deliberate. `dublin_today()` is the single
+ * home of the rollover rule; asking for "today's board" by sending a date computed from
+ * the browser clock would make a skewed device request the wrong daily either side of
+ * midnight. Passing null lets the function resolve the daily in the one place that owns
+ * the rule. A frozen past board is a separate read that does not exist yet — when it
+ * does, it should take an explicit archive date rather than reusing this call.
  *
  * Reads one row past the page so {@link toPage} can report whether a next page exists
  * without a second count over the whole board.
  */
-export async function fetchGlobalLeaderboard(opts: {
-	date?: string;
-	page?: number;
-}): Promise<LeaderboardPage> {
+export async function fetchGlobalLeaderboard(opts: { page?: number }): Promise<LeaderboardPage> {
 	const { data, error } = await supabaseBrowserClient().rpc('global_leaderboard', {
-		p_date: opts.date ?? null,
+		p_date: null,
 		p_limit: PAGE_SIZE + 1,
 		p_offset: offsetFor(opts.page ?? 0)
 	});
