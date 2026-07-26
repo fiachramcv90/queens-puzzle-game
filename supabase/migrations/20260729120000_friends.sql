@@ -614,6 +614,20 @@ comment on function public.friends_leaderboard(date) is
 -- an account on both sides.
 -- ---------------------------------------------------------------------------
 
+-- Table grants. A policy without a matching GRANT is dead code: Postgres checks the
+-- privilege first, so the row would be filtered by a policy that never runs. The two
+-- select policies above are the read path for a player's own relationships, and
+-- `unblock_user` is unusable without one — there would be no way to see who you have
+-- blocked in order to unblock them.
+--
+-- SELECT only, and only for `authenticated`. There is deliberately no insert, update
+-- or delete grant on either table: every mutation goes through the definer functions,
+-- which is what lets them enforce the consent rule and the block check.
+grant select on public.friendships to authenticated;
+grant select on public.blocks to authenticated;
+grant all on public.friendships to service_role;
+grant all on public.blocks to service_role;
+
 revoke all on function public.is_blocked_between(uuid, uuid) from public;
 revoke all on function public.generate_friend_code() from public;
 revoke all on function public.ensure_friend_code() from public;

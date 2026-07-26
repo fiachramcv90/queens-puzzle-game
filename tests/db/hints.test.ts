@@ -23,15 +23,21 @@ let sql: Sql;
 
 const PUZZLE_ID = '77777777-0000-0000-0000-000000000028';
 const OFFSET_DAYS = 61;
-const GUEST = '88888888-0000-0000-0000-000000000028';
 
-/** Open an uncompleted play for the fixture guest and return its token. */
-async function openPlay(attemptNo = 1): Promise<string> {
+/**
+ * Open an uncompleted play and return its token.
+ *
+ * A FRESH GUEST per call, deliberately. `plays_one_open_per_guest` allows exactly one
+ * open play per identity per date — the constraint that makes `start` idempotent for
+ * a reloading player — so a shared fixture guest would collide on the second call.
+ * Each test here wants its own independent play, which means its own identity.
+ */
+async function openPlay(): Promise<string> {
 	const rows = await sql<{ token: string }[]>`
     insert into public.plays
       (guest_id, puzzle_id, puzzle_date, attempt_no, started_at)
     values (
-      ${GUEST}, ${PUZZLE_ID}, public.dublin_today() - ${OFFSET_DAYS}::int, ${attemptNo},
+      ${crypto.randomUUID()}, ${PUZZLE_ID}, public.dublin_today() - ${OFFSET_DAYS}::int, 1,
       now()
     )
     returning token
@@ -191,24 +197,40 @@ describe('hint functions are unreachable by clients', () => {
 	});
 
 	// The structural wall the reveal oracle rests on: even knowing a puzzle id, the
-	// solution is not selectable. puzzle_solutions has zero policies.
+	// solution is not selectable.
+	//
+	// The refusal is a PRIVILEGE error, not an empty result — `puzzle_solutions` has
+	// zero policies AND no grant to either client role, so Postgres rejects the read
+	// before RLS is ever consulted. That is the stronger of the two failures, and the
+	// one worth pinning: a future migration that added a grant would turn this into
+	// "returns nothing because a policy said so", which is one accidental permissive
+	// policy away from returning everything.
 	test('anon and authenticated cannot read puzzle_solutions directly', async () => {
 		for (const role of ['anon', 'authenticated'] as const) {
-			const rows = await asRole(
-				role,
-				(tx) => tx`select solution from public.puzzle_solutions where puzzle_id = ${PUZZLE_ID}`
-			);
-			expect(rows).toHaveLength(0);
+			await expect(
+				asRole(
+					role,
+					(tx) => tx`select solution from public.puzzle_solutions where puzzle_id = ${PUZZLE_ID}`
+				)
+			).rejects.toThrow(/permission denied/i);
 		}
 	});
 
-	// A client has no write path to plays at all, so it cannot un-assist itself.
+	// A client has no write path to `plays` at all, so it cannot un-assist itself.
+	// `plays` grants SELECT to authenticated and nothing else, so the update is
+	// refused on privilege — asserted explicitly, and then re-checked on the row, so
+	// the test fails loudly if a future grant ever made the write merely a no-op.
 	test('a client cannot clear assisted once it is set', async () => {
 		const token = await openPlay();
 		await sql`select * from public.mark_play_assisted(${token})`;
-		await asRole('authenticated', async (tx) => {
-			await tx`update public.plays set assisted = false where token = ${token}`;
-		});
+
+		await expect(
+			asRole(
+				'authenticated',
+				(tx) => tx`update public.plays set assisted = false where token = ${token}`
+			)
+		).rejects.toThrow(/permission denied/i);
+
 		expect((await playByToken(token)).assisted).toBe(true);
 	});
 });

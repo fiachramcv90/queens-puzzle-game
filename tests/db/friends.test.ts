@@ -369,10 +369,16 @@ describe('RLS on the friends tables', () => {
 		const bCode = await codeOf(b);
 		await as(a, (tx) => tx`select public.request_friendship(${bCode})`);
 
-		await asRolledBack(a, async (tx) => {
-			await tx`update public.friendships set status = 'accepted'
-               where user_low = least(${a}::uuid, ${b}::uuid)`.catch(() => {});
-		});
+		// Refused on privilege: `friendships` grants SELECT and nothing else. Asserted
+		// rather than swallowed, so this cannot quietly become a test that passes
+		// because the update silently matched no rows.
+		await expect(
+			asRolledBack(
+				a,
+				(tx) => tx`update public.friendships set status = 'accepted'
+                   where user_low = least(${a}::uuid, ${b}::uuid)`
+			)
+		).rejects.toThrow(/permission denied/i);
 
 		const [row] = await sql<{ status: string }[]>`
       select status from public.friendships
@@ -487,12 +493,17 @@ describe('friends_leaderboard', () => {
 		expect(theirs?.assisted).toBe(true);
 		expect(theirs?.hints_used).toBe(3);
 
-		// The same play is absent from the global board for the same date.
+		// The same play is absent from the global board. Asserted on THIS friend rather
+		// than on an empty board: other tests in this describe share the fixture date
+		// and legitimately put clean solves on it, so an emptiness check would be
+		// asserting test isolation rather than the projection difference.
 		const globalRows = await as(
 			me,
-			(tx) => tx`select * from public.global_leaderboard(${date}::date, 50, 0)`
+			(tx) => tx<{ display_name: string }[]>`
+        select * from public.global_leaderboard(${date}::date, 100, 0)
+      `
 		);
-		expect(globalRows).toHaveLength(0);
+		expect(globalRows.map((r) => r.display_name)).not.toContain('assist-friend');
 	});
 
 	test('excludes a stale play and a later attempt', async () => {
@@ -533,12 +544,17 @@ describe('friends_leaderboard', () => {
 		expect(rows.map((r) => r.user_id)).not.toContain(blocked);
 	});
 
-	test('is empty for a signed-out caller', async () => {
+	// Friends requires an account on both sides, so `anon` is refused the function
+	// outright rather than being handed an empty board. The `auth.uid() is null` guard
+	// inside the function is the second line of that defence, for a session that
+	// resolves to nobody — not the first.
+	test('is refused entirely for a signed-out caller', async () => {
 		const date = await boardDate();
-		const rows = await sql.begin(async (tx) => {
-			await tx.unsafe(`set local role anon`);
-			return tx`select * from public.friends_leaderboard(${date}::date)`.catch(() => []);
-		});
-		expect(rows).toHaveLength(0);
+		await expect(
+			sql.begin(async (tx) => {
+				await tx.unsafe(`set local role anon`);
+				return tx`select * from public.friends_leaderboard(${date}::date)`;
+			})
+		).rejects.toThrow(/permission denied/i);
 	});
 });
