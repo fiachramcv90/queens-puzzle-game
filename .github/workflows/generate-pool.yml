@@ -47,10 +47,6 @@ on:
         description: 'Days of runway to keep ahead (blank = the pool.horizonDays default)'
         required: false
         default: ''
-      backfill_past_days:
-        description: 'Archive days behind today to fill as well (blank or 0 = none)'
-        required: false
-        default: ''
 
 # Never let two runs race against the same database.
 concurrency:
@@ -95,5 +91,4 @@ jobs:
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           POOL_DRY_RUN: ${{ inputs.dry_run }}
           POOL_HORIZON_DAYS: ${{ inputs.horizon_days }}
-          POOL_BACKFILL_PAST_DAYS: ${{ inputs.backfill_past_days }}
         run: npm run seed:remote

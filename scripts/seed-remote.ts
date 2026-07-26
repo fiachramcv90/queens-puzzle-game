@@ -92,12 +92,6 @@ function numberEnv(name: string, fallback: number): number {
 const HORIZON_DAYS = numberEnv('POOL_HORIZON_DAYS', pool.horizonDays);
 /** Runway below this fails the run loudly. Defaults to `pool.loudFailWatermarkDays`. */
 const WATERMARK_DAYS = numberEnv('POOL_WATERMARK_DAYS', pool.loudFailWatermarkDays);
-/**
- * Archive days behind today to fill as well. Zero by default — the pipeline's job is
- * runway, and past dailies are history that must not be rewritten. The knob exists so an
- * operator standing a fresh project up can lay down an archive in one manual dispatch.
- */
-const BACKFILL_PAST_DAYS = numberEnv('POOL_BACKFILL_PAST_DAYS', 0);
 
 /** A GitHub Actions annotation, so a failure is visible in the run summary, not just the log. */
 function annotate(level: 'error' | 'warning', message: string): void {
@@ -122,30 +116,18 @@ async function scheduledDatesBetween(
 /**
  * Plan a run against what the schedule currently holds.
  *
- * Archive backfill (off by default) is folded in as extra target dates rather than as a
- * wider horizon: past dates are not runway, and the watermark verdict must only ever look
- * forward or it would read a long archive as healthy runway.
+ * Forward-looking only. This pipeline's job is runway; past dailies are history and must
+ * not be rewritten, and the watermark verdict must only ever look forward or a long
+ * archive would read as healthy runway.
  */
 async function readPlan(db: SupabaseClient, today: string): Promise<SchedulePlan> {
-	const from = shiftDate(today, -BACKFILL_PAST_DAYS);
-	const to = shiftDate(today, HORIZON_DAYS);
-	const scheduledDates = await scheduledDatesBetween(db, from, to);
-
-	const plan = planSchedule({
+	const scheduledDates = await scheduledDatesBetween(db, today, shiftDate(today, HORIZON_DAYS));
+	return planSchedule({
 		today,
 		scheduledDates,
 		horizonDays: HORIZON_DAYS,
 		watermarkDays: WATERMARK_DAYS
 	});
-
-	if (BACKFILL_PAST_DAYS === 0) return plan;
-
-	const held = new Set(scheduledDates);
-	const past = Array.from({ length: BACKFILL_PAST_DAYS }, (_unused, i) =>
-		shiftDate(today, -(BACKFILL_PAST_DAYS - i))
-	).filter((date) => !held.has(date));
-
-	return { ...plan, targetDates: [...past, ...plan.targetDates] };
 }
 
 /** The puzzle id already holding this canonical hash, or null. */
