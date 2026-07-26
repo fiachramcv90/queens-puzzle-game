@@ -33,9 +33,11 @@ export function recordFromResult(
 		attemptNo: result.attemptNo,
 		elapsedMs: result.elapsedMs,
 		mistakes: result.mistakes,
-		// No hints or assists exist yet (#28); a play carries their defaults for now.
-		hintsUsed: 0,
-		assisted: false,
+		// Both are the server's numbers, echoed from the submit response. A local
+		// record that disagreed with the row would show a player a clean history for a
+		// play the leaderboard had already excluded.
+		hintsUsed: result.hintsUsed,
+		assisted: result.assisted,
 		stale: result.stale,
 		unverified: result.unverified,
 		replay: result.replay

@@ -24,7 +24,7 @@ export type FetchLike = typeof fetch;
 
 async function postJson<T>(
 	fetchImpl: FetchLike,
-	action: 'start' | 'heartbeat' | 'submit',
+	action: 'start' | 'heartbeat' | 'submit' | 'reveal' | 'assist',
 	payload: unknown
 ): Promise<T> {
 	const res = await fetchImpl(`/api/play/${action}`, {
@@ -74,4 +74,40 @@ export class PlayRequestError extends Error {
 		super(`play ${action} failed with ${status}`);
 		this.name = 'PlayRequestError';
 	}
+}
+
+/** What a hint call returns: the server's flag and its own hint count. */
+export interface AssistResult {
+	readonly assisted: boolean;
+	readonly hintsUsed: number | null;
+}
+
+/** What `reveal` returns — the next correct cell, or null when there is none left. */
+export interface RevealResult extends AssistResult {
+	readonly cell: { readonly row: number; readonly col: number } | null;
+}
+
+/**
+ * Ask the server for the next correct cell. The solution never reaches the browser;
+ * only the single cell does. The server flags the play `assisted` as part of
+ * answering, so there is no separate "admit it" step the client could skip.
+ */
+export function revealCell(
+	token: string,
+	board: Board,
+	fetchImpl: FetchLike = fetch
+): Promise<RevealResult> {
+	return postJson<RevealResult>(fetchImpl, 'reveal', { token, board });
+}
+
+/**
+ * Record a hint that the client computed for itself (the mistake check, or
+ * switching on auto-mark-X). The work happens locally; this is the charge.
+ *
+ * Callers must await this BEFORE showing the hint's output. Applying the help and
+ * only then telling the server would leave a window in which a dropped request buys
+ * a free hint — small, but it is exactly the hole `assisted` exists to close.
+ */
+export function recordAssist(token: string, fetchImpl: FetchLike = fetch): Promise<AssistResult> {
+	return postJson<AssistResult>(fetchImpl, 'assist', { token });
 }

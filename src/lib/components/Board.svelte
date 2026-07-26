@@ -41,6 +41,12 @@
 		regionMap: RegionMap;
 		board: Board;
 		conflicts: ReadonlySet<string>;
+		/**
+		 * Cells the mistake check flagged, drawn until the next move. Distinct from
+		 * `conflicts`: the ring is the always-on free baseline, this is the answer to a
+		 * hint the player deliberately paid for, so it is drawn more loudly.
+		 */
+		flagged?: readonly Cell[];
 		/** The token set the region fills are drawn from. Fills only — never the borders. */
 		palette: Palette;
 		/** Draw the per-region letter on every cell. */
@@ -50,8 +56,19 @@
 		onSweep: (cells: readonly Cell[]) => void;
 	}
 
-	let { regionMap, board, conflicts, palette, regionLabels, onTap, onToggleX, onSweep }: Props =
-		$props();
+	let {
+		regionMap,
+		board,
+		conflicts,
+		flagged = [],
+		palette,
+		regionLabels,
+		onTap,
+		onToggleX,
+		onSweep
+	}: Props = $props();
+
+	const flaggedKeys = $derived(new Set(flagged.map(({ row, col }) => `${row},${col}`)));
 
 	const size = $derived(board.length);
 
@@ -230,11 +247,13 @@
 				{@const region = regionMap[row][col]}
 				{@const color = regionColor(palette, region)}
 				{@const ringed = state === 'queen' && isConflict(conflicts, row, col)}
+				{@const marked = flaggedKeys.has(`${row},${col}`)}
 				<div
 					class="cell"
 					class:cage-right={cageRight(row, col)}
 					class:cage-bottom={cageBottom(row, col)}
 					class:ringed
+					class:flagged={marked}
 					role="gridcell"
 					tabindex={isFocused(row, col) ? 0 : -1}
 					data-row={row}
@@ -328,6 +347,15 @@
 	/* The free-baseline conflict signal: a subtle red inset ring, not a fill. */
 	.cell.ringed {
 		box-shadow: inset 0 0 0 3px var(--conflict-ring);
+	}
+
+	/* The mistake check's answer: a heavier, dashed ring so it is legible as a
+	   different signal from the passive conflict ring — the player asked a question
+	   and this is the reply, not ambient feedback. */
+	.cell.flagged {
+		box-shadow: inset 0 0 0 3px var(--conflict-ring);
+		outline: 2px dashed var(--conflict-ring);
+		outline-offset: -6px;
 	}
 
 	/*

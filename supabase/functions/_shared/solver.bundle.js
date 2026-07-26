@@ -646,6 +646,19 @@ function mixSeed(seed, attempt) {
   return (x ^ x >>> 16) >>> 0;
 }
 
+// src/lib/solver/reveal.ts
+function nextReveal(board, solution) {
+  const ordered = [...solution].sort((a, b) => a.row - b.row || a.col - b.col);
+  for (const cell of ordered) {
+    if (!isQueenAt(board, cell)) return { row: cell.row, col: cell.col };
+  }
+  return null;
+}
+function isQueenAt(board, cell) {
+  var _a;
+  return ((_a = board[cell.row]) == null ? void 0 : _a[cell.col]) === "queen";
+}
+
 // src/lib/solver/replay.ts
 function replayMoveLog(regionMap, moveLog) {
   const size = regionMap.length;
@@ -711,6 +724,7 @@ export {
   generate,
   generatePuzzle,
   isAdjacent,
+  nextReveal,
   replayMoveLog,
   scoreDifficulty,
   tierForScore

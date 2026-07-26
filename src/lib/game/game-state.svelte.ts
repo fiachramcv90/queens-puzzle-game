@@ -16,6 +16,7 @@
 import { checkRules } from '$lib/solver';
 import type { Board, Cell, DifficultyTier, Move, MoveLog, RegionMap } from '$lib/solver';
 import { createEmptyBoard, sweepX, tapCell, toggleXCell } from './board';
+import { applyAutoMarks, clearAutoMarks } from './hints';
 import { deriveConflicts } from './conflicts';
 import type { Daily, PersistedPlay, PlayResult } from './types';
 
@@ -41,6 +42,19 @@ export class GameState {
 	token: string | undefined = $state(undefined);
 	/** The server's recorded result, once the solve has been submitted. */
 	result: PlayResult | undefined = $state(undefined);
+
+	/**
+	 * Whether this play has taken a hint. Mirrors the SERVER's flag — the server
+	 * sets it, this only reflects what the server said so the UI can stop warning a
+	 * player who is already unranked. Nothing here is what the leaderboard reads.
+	 */
+	assisted: boolean = $state(false);
+	/** Hints taken, as counted by the server. Shown to friends, never to rank. */
+	hintsUsed: number = $state(0);
+	/** Whether the auto-mark-X assist is currently filling cells. */
+	autoMarkX: boolean = $state(false);
+	/** Cells the mistake check flagged, until the next move clears them. */
+	flagged: readonly Cell[] = $state.raw([]);
 
 	/**
 	 * The move log: every cell state-change in order, `t` ms since the play start.
@@ -76,6 +90,9 @@ export class GameState {
 		this.moves = usable?.moveLog ? [...usable.moveLog] : [];
 		this.token = usable?.token;
 		this.result = usable?.result;
+		this.assisted = usable?.assisted ?? false;
+		this.hintsUsed = usable?.hintsUsed ?? 0;
+		this.autoMarkX = usable?.autoMarkX ?? false;
 		this.nowMs = Date.now();
 	}
 
@@ -94,6 +111,38 @@ export class GameState {
 		this.applyMove(sweepX(this.board, cells));
 	}
 
+	/**
+	 * Turn the auto-mark-X assist on or off. Turning it ON immediately fills the
+	 * ruled-out cells; turning it OFF clears every mark it placed and leaves the
+	 * player's own alone.
+	 *
+	 * The `assisted` charge is NOT made here — the caller records it with the server
+	 * first and only flips this once the server has agreed. A locally-set flag would
+	 * be exactly the client-confessed flag the spec forbids.
+	 */
+	setAutoMarkX(on: boolean): void {
+		this.autoMarkX = on;
+		this.applyMove(on ? applyAutoMarks(this.board, this.regionMap) : clearAutoMarks(this.board));
+	}
+
+	/** Show the mistake check's findings until the player's next move. */
+	flag(cells: readonly Cell[]): void {
+		this.flagged = cells;
+	}
+
+	/**
+	 * Place a revealed queen. It goes through the normal move path, so it lands in
+	 * the move log exactly like a hand-placed queen — the log is a record of what
+	 * happened to the board, and a revealed queen did happen.
+	 */
+	reveal(cell: Cell): void {
+		this.applyMove(
+			this.board.map((cells, row) =>
+				cells.map((state, col) => (row === cell.row && col === cell.col ? 'queen' : state))
+			)
+		);
+	}
+
 	/** The move log so far — what the client submits and persists. */
 	moveLog(): MoveLog {
 		return this.moves;
@@ -108,7 +157,10 @@ export class GameState {
 			solvedElapsedMs: this.solvedElapsedMs,
 			moveLog: this.moves,
 			token: this.token,
-			result: this.result
+			result: this.result,
+			assisted: this.assisted,
+			hintsUsed: this.hintsUsed,
+			autoMarkX: this.autoMarkX
 		};
 	}
 
@@ -120,15 +172,24 @@ export class GameState {
 	 * `startedAt` after `start` returns.
 	 */
 	private applyMove(next: Board): void {
+		// The assist owns its marks, so they are recomputed against the new board on
+		// every move — a queen lifted must take its auto-X's with it, or the assist
+		// quietly lies. This happens BEFORE the diff, deliberately: the log has to
+		// describe the board that actually results, or the server's replay reproduces
+		// a different board and flags an honest solve `unverified`.
+		const settled = this.autoMarkX ? applyAutoMarks(next, this.regionMap) : next;
+
 		const t = Math.max(0, Date.now() - this.startedAt);
-		for (let row = 0; row < next.length; row++) {
-			for (let col = 0; col < next[row].length; col++) {
-				if (next[row][col] !== this.board[row][col]) {
-					this.moves.push({ t, row, col, to: next[row][col] });
+		for (let row = 0; row < settled.length; row++) {
+			for (let col = 0; col < settled[row].length; col++) {
+				if (settled[row][col] !== this.board[row][col]) {
+					this.moves.push({ t, row, col, to: settled[row][col] });
 				}
 			}
 		}
-		this.board = next;
+		this.board = settled;
+		// Any move invalidates what the mistake check found a moment ago.
+		this.flagged = [];
 		this.freezeIfSolved();
 	}
 

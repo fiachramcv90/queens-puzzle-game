@@ -12,6 +12,7 @@
 	import { heartbeat } from '$lib/config';
 	import Board from '$lib/components/Board.svelte';
 	import BoardSettings from '$lib/components/BoardSettings.svelte';
+	import HintPanel from '$lib/components/HintPanel.svelte';
 	import StreakBadge from '$lib/components/StreakBadge.svelte';
 	import { AUTH_CONTEXT, type AuthContext } from '$lib/auth/context';
 	import { computeStreak, dublinToday, viewStreak } from '$lib/streak/streak';
@@ -85,6 +86,12 @@
 
 		prefs = blob?.prefs ?? {};
 		solvedDates = blob?.solvedDates ?? [];
+
+		// The auto-mark-X PREFERENCE carries across days, but it must not switch itself
+		// on for a fresh play: that would silently charge `assisted` for a choice the
+		// player made yesterday. A restored play keeps whatever it was running with; a
+		// new play starts clean and the player opts in again through the hint panel.
+		if (restored?.autoMarkX) game.setAutoMarkX(true);
 		// A restored, already-solved TODAY play still belongs to its day's streak.
 		if (
 			game.result &&
@@ -217,6 +224,13 @@
 
 	<BoardSettings {prefs} onChange={changePrefs} />
 
+	<!-- Hints are offered only while the play is live. After the result screen there is
+	     nothing left to help with, and a "reveal" control beside a finished solve would
+	     read as an invitation to redo it. -->
+	{#if !game.result}
+		<HintPanel {game} onAutoMarkXChange={(on) => changePrefs({ autoMarkX: on })} />
+	{/if}
+
 	<div
 		class="board-wrap"
 		style={`--cell-size: min(2.75rem, calc((100vw - 2.5rem) / ${game.size}))`}
@@ -225,6 +239,7 @@
 			regionMap={game.regionMap}
 			board={game.board}
 			conflicts={game.conflicts}
+			flagged={game.flagged}
 			palette={boardPrefs.palette}
 			regionLabels={boardPrefs.regionLabels}
 			onTap={(row, col) => game?.tap(row, col)}
@@ -248,6 +263,12 @@
 				<p class="badge">Archive — doesn't affect your streak or ranking</p>
 			{:else if game.result.replay}
 				<p class="badge">Replay — practice, not ranked</p>
+			{/if}
+			{#if game.result.assisted}
+				<p class="badge">
+					Assisted — {game.result.hintsUsed}
+					{game.result.hintsUsed === 1 ? 'hint' : 'hints'} used, not ranked
+				</p>
 			{/if}
 			{#if game.result.stale}
 				<p class="badge">Idle too long — counts, but out of ranking</p>

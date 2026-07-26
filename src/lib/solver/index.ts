@@ -38,6 +38,7 @@ export {
 } from './difficulty';
 export { extractSignals } from './signals';
 export { boardHash } from './hash';
+export { nextReveal } from './reveal';
 export { replayMoveLog, type ReplayResult } from './replay';
 export {
 	decideSubmission,

@@ -51,7 +51,11 @@ export interface GuestPrefs {
 	 * the colourblind-friendly palette only; `resolveBoardPrefs` enforces that.
 	 */
 	readonly regionLabels?: boolean;
-	/** Auto-place mark (X) on cells a placed queen rules out. */
+	/**
+	 * Whether the auto-mark-X assist is on. A PREFERENCE, not a play fact: it says
+	 * how this player likes to solve. The `assisted` charge that switching it on
+	 * incurs is per-play and server-set, and is never read from here.
+	 */
 	readonly autoMarkX?: boolean;
 }
 
@@ -73,6 +77,13 @@ export interface PlayResult {
 	readonly replay: boolean;
 	/** 1 for the first attempt at this daily, incrementing per later attempt. */
 	readonly attemptNo: number;
+	/**
+	 * A hint was taken: the play is out of the global ranking. Server-set — the
+	 * client cannot clear it by omitting it from the submit payload.
+	 */
+	readonly assisted: boolean;
+	/** How many hints the server counted. Shown to friends, and in history. */
+	readonly hintsUsed: number;
 }
 
 /**
@@ -99,6 +110,17 @@ export interface PersistedPlay {
 	readonly token?: string;
 	/** The server's recorded result, once the solve has been submitted. */
 	readonly result?: PlayResult;
+	/**
+	 * Whether this play has taken a hint, as the SERVER last reported it. Persisted
+	 * so a refresh mid-solve does not go back to warning a player who is already
+	 * unranked — but it is only ever a mirror. The leaderboard reads the server's
+	 * column, never this.
+	 */
+	readonly assisted?: boolean;
+	/** Hints taken, as counted by the server. */
+	readonly hintsUsed?: number;
+	/** Whether the auto-mark-X assist was running when the play was persisted. */
+	readonly autoMarkX?: boolean;
 }
 
 /**
