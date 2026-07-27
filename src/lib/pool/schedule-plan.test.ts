@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { WEEKLY_RAMP, rampSlotForDate } from './ramp';
-import { horizonDates, planSchedule, runwayDays } from './schedule-plan';
+import { horizonDates, planSchedule, runwayDays, withinWatermarkWindow } from './schedule-plan';
 import { shiftDate } from './seed-window';
 
 /**
@@ -33,6 +33,59 @@ describe('horizonDates', () => {
 
 	test('a 90-day horizon holds 90 dates', () => {
 		expect(horizonDates('2026-07-26', 90)).toHaveLength(90);
+	});
+});
+
+/**
+ * The watermark window — the line deciding what a reject-sample MISS costs (#53).
+ *
+ * Inside it, a miss is filled off-slot because a gap that close would break the daily for
+ * everyone. Outside it, the date is left empty so a later run can retry it onto the right
+ * tier, rather than freezing a wrong-tier board in place forever.
+ */
+describe('withinWatermarkWindow', () => {
+	test('today is inside the window', () => {
+		expect(withinWatermarkWindow('2026-07-26', '2026-07-26', 30)).toBe(true);
+	});
+
+	test('the last day of the window is inside it and the next day is not', () => {
+		expect(withinWatermarkWindow('2026-07-26', '2026-08-24', 30)).toBe(true); // +29
+		expect(withinWatermarkWindow('2026-07-26', '2026-08-25', 30)).toBe(false); // +30
+	});
+
+	test('a far horizon date is outside it', () => {
+		expect(withinWatermarkWindow('2026-07-26', '2026-10-20', 30)).toBe(false);
+	});
+
+	test('compares as calendar dates across a year boundary, not as strings by luck', () => {
+		expect(withinWatermarkWindow('2026-12-20', '2027-01-05', 30)).toBe(true);
+		expect(withinWatermarkWindow('2026-12-20', '2027-02-05', 30)).toBe(false);
+	});
+
+	/**
+	 * The interlock that makes the two halves safe together: a gap is only ever created
+	 * outside the window, and `runwayDays` stops at the first gap — so the run that creates
+	 * a gap always still meets the watermark, and only a gap that survives until it drifts
+	 * inside the window turns the run red.
+	 */
+	test('a date left open is always beyond the runway the watermark demands', () => {
+		const today = '2026-07-26';
+		const watermark = 30;
+		// Every date the pipeline is allowed to leave open...
+		const leavable = horizonDates(today, 90).filter(
+			(date) => !withinWatermarkWindow(today, date, watermark)
+		);
+		for (const gap of leavable) {
+			// ...still leaves a full watermark's worth of consecutive days in front of it.
+			const scheduled = horizonDates(today, 90).filter((date) => date !== gap);
+			const plan = planSchedule({
+				today,
+				scheduledDates: scheduled,
+				horizonDays: 90,
+				watermarkDays: watermark
+			});
+			expect(plan.meetsWatermark).toBe(true);
+		}
 	});
 });
 
@@ -110,6 +163,19 @@ describe('planSchedule', () => {
 		const plan = planSchedule({ ...options, scheduledDates: [] });
 		expect(plan.watermarkDays).toBe(30);
 		expect(plan.horizonDays).toBe(90);
+	});
+
+	test('carries the off-slot verdict for each date, against its own watermark', () => {
+		const plan = planSchedule({
+			today: '2026-07-26',
+			scheduledDates: [],
+			horizonDays: 90,
+			watermarkDays: 30
+		});
+		expect(plan.acceptsOffSlotFill('2026-07-26')).toBe(true); // today
+		expect(plan.acceptsOffSlotFill('2026-08-24')).toBe(true); // last day inside
+		expect(plan.acceptsOffSlotFill('2026-08-25')).toBe(false); // first day outside
+		expect(plan.acceptsOffSlotFill('2026-10-20')).toBe(false); // far out
 	});
 
 	test('every target date carries its ramp slot', () => {
