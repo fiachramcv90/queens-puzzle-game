@@ -17,31 +17,35 @@
  * keeps a board only when the *computed* tier matches. The ramp names the target; the
  * solver core decides whether a given board hits it.
  *
- * ## Why the week starts at Medium and not at Intro
+ * ## Why the week starts at Intro, and skips Easy (#52)
  *
- * Every slot below is **reachable** — measured against the current generator and the
- * current `scoreDifficulty` cut points, each one is hit within the reject-sampling budget
- * (`config.pool.tierAttemptsPerDate`) reliably — measured at 28 consecutive dates, all 28
- * landed on slot, in 2.8s of CPU total.
+ * Every slot below is **reachable** — each is hit within its reject-sampling budget
+ * (`config.pool.tierAttemptsPerDate`, with the per-tier override beside it) reliably.
  *
- * That constraint is what shapes the low end. With today's cut points the *easiest board
- * the generator reliably makes* is a Medium: sampled across every irregularity bias, a
- * 7×7 scores 49–86 almost always, against an `Easy` ceiling of 45 and an `Intro` ceiling
- * of 20. Intro turns up in roughly one draw in twenty-five, and `Easy` in none — so
- * neither is a slot a date could be filled to dependably. Board size is the
- * second-heaviest term in the score and 7 is already its floor, so there is no smaller
- * board to reach for.
+ * The low end is shaped by a discontinuity in the score rather than by board size. The
+ * dominant term is forced-deduction depth, an INTEGER, normalised `depth / (depth + 1.5)`
+ * and weighted 100: depth 0 contributes 0, depth 1 contributes 40. At 7×7 the size term
+ * is exactly 0 (it normalises `(size - 7) / 4`), so a 7×7 scores either **~9** — the board
+ * falls to pure propagation, no guessing anywhere — or **≥45**, once any hypothesis is
+ * needed. Nothing lands between. Measured over 600 boards across ten irregularity biases:
+ * 22 scored 8.6–9.1, the rest 45–87, and **not one** landed in the 10–45 band.
  *
- * Aiming the ramp at tiers the generator cannot produce would not make easier dailies —
- * it would make every Monday and Tuesday miss its slot and get filled off-target, so the
- * ramp would be fiction while the boards stayed exactly as hard. A ramp of reachable
- * slots is the honest version of the same curve: it still climbs gently, still trends
- * size up alongside tier, still puts Expert at the weekend.
+ * `Easy` occupies 20–45 at this size, so it is not merely rare — it is **structurally
+ * unreachable**, and it stays unreachable at a smaller board, because the size term is
+ * already clamped to 0 at the floor. That also means reducing the size weight would not
+ * open it up. Only recalibration will: `difficulty.ts` holds the weights and the cut
+ * points, and the spec books that in as a post-launch fast-follow against real solve
+ * times. When the cut points move, revisit the ladder here.
  *
- * The fix for the low end is recalibration, not a different ramp: `difficulty.ts` holds
- * the weights and the tier cut points, and the build spec already books that in as a
- * post-launch fast-follow against real solve times. When the cut points move, move the
- * two early cells here with them — nothing else in the pipeline is affected.
+ * `Intro` **is** reachable — roughly one 7×7 draw in a hundred is depth 0 — which is why
+ * Monday aims at it. Those boards are not visually plainer for being easy: their region
+ * size variance runs 8.9–20.0, ABOVE the Mediums at 6.3–17.1. They read as proper Queens
+ * boards that happen to never force a guess, which is exactly what a Monday should be.
+ *
+ * So the reachable ladder is **Intro → Medium → Hard → Expert**, and the week climbs one
+ * reachable step at a time. It is still gentle, still trends size up alongside tier, still
+ * puts Expert at the weekend; the gap where `Easy` would sit is the score's, not the
+ * ramp's.
  */
 
 import type { DifficultyTier } from '$lib/solver';
@@ -55,13 +59,14 @@ export interface RampSlot {
 
 /**
  * The ramp, Monday first. Both columns are non-decreasing across the week, and the tier
- * never climbs more than one step in a day.
+ * never climbs more than one REACHABLE step in a day — `Easy` is skipped because no board
+ * can score into it, not because the week jumps (see the module doc).
  */
 export const WEEKLY_RAMP: readonly RampSlot[] = [
-	{ tier: 'Medium', size: 7 }, // Mon — the gentlest board the generator currently makes
-	{ tier: 'Hard', size: 7 }, // Tue — same size, a harder region layout
-	{ tier: 'Hard', size: 8 }, // Wed — a tier plateau, so the climb is not mechanical
-	{ tier: 'Hard', size: 9 }, // Thu — size carries the difficulty this time
+	{ tier: 'Intro', size: 7 }, // Mon — depth 0: solvable by propagation alone, no guessing
+	{ tier: 'Medium', size: 7 }, // Tue — same size, but now a hypothesis is needed
+	{ tier: 'Hard', size: 8 }, // Wed — tier and size both step up
+	{ tier: 'Hard', size: 9 }, // Thu — a tier plateau; size carries the climb instead
 	{ tier: 'Expert', size: 9 }, // Fri
 	{ tier: 'Expert', size: 10 }, // Sat — Expert at the weekend
 	{ tier: 'Expert', size: 11 } // Sun — the week's hardest board

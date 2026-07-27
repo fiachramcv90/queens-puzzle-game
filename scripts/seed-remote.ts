@@ -56,7 +56,12 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { generate, generatePuzzle, type GeneratedPuzzle } from '../src/lib/solver/index';
+import {
+	generate,
+	generatePuzzle,
+	type DifficultyTier,
+	type GeneratedPuzzle
+} from '../src/lib/solver/index';
 import { entryParams, shiftDate, type SeedEntry } from '../src/lib/pool/seed-window';
 import { planSchedule, type SchedulePlan } from '../src/lib/pool/schedule-plan';
 import { pool } from '../src/lib/config/index';
@@ -87,6 +92,34 @@ function numberEnv(name: string, fallback: number): number {
 	const parsed = Number(raw);
 	return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+/**
+ * Dates to re-roll: their schedule rows are dropped before planning, so the run refills
+ * them from scratch. `POOL_REROLL_DATES=2026-08-03,2026-08-10`.
+ *
+ * This is the "re-roll at leisure" half of the off-slot trade (#53), and it has to exist
+ * as a real action: a date that already holds a schedule row is skipped by every future
+ * run, so a plain re-dispatch can NEVER change a board that was filled off-slot. Only
+ * clearing the row puts the date back in `targetDates`.
+ */
+const REROLL_DATES: ReadonlySet<string> = new Set(
+	(process.env.POOL_REROLL_DATES ?? '')
+		.split(',')
+		.map((date) => date.trim())
+		.filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+);
+
+/**
+ * A perturbation applied to a re-rolled date's seed, so it does not regenerate the board
+ * being re-rolled.
+ *
+ * `seedForDate` is the date itself, deliberately stable so an ordinary re-run is
+ * idempotent. That stability is exactly wrong here: without a perturbation the re-roll
+ * would sample the identical board, find its hash on the now-unscheduled puzzle, and
+ * reuse it — handing back the very board the operator asked to be rid of. A re-roll is
+ * therefore deliberately NOT idempotent; running it twice gives two different boards.
+ */
+const REROLL_SALT = Date.now() % 1_000_003;
 
 /** How far ahead to keep the schedule. Defaults to the tunable `pool.horizonDays`. */
 const HORIZON_DAYS = numberEnv('POOL_HORIZON_DAYS', pool.horizonDays);
@@ -128,6 +161,24 @@ async function readPlan(db: SupabaseClient, today: string): Promise<SchedulePlan
 		horizonDays: HORIZON_DAYS,
 		watermarkDays: WATERMARK_DAYS
 	});
+}
+
+/**
+ * Drop the schedule rows for `dates`, so the run treats them as unfilled and refills them.
+ *
+ * Only the `puzzle_schedule` row goes. The puzzle itself is left in place, unscheduled —
+ * it is a perfectly good board that simply landed on the wrong day, and leaving it lets
+ * the hash-reuse path in `fillDate` pick it up for some other date later.
+ *
+ * The delete carries an explicit `in` filter. Supabase preloads `safeupdate` on the Data
+ * API role, which requires a WHERE clause on every write, and a filterless delete here
+ * would wipe the entire schedule — the blast radius is the whole daily, so the filter is
+ * load-bearing rather than stylistic.
+ */
+async function clearScheduleRows(db: SupabaseClient, dates: readonly string[]): Promise<void> {
+	if (dates.length === 0) return;
+	const { error } = await db.from('puzzle_schedule').delete().in('date', dates);
+	if (error) throw new Error(`re-roll delete failed: ${error.message}`);
 }
 
 /** The puzzle id already holding this canonical hash, or null. */
@@ -188,25 +239,40 @@ async function insertPuzzle(db: SupabaseClient, puzzle: GeneratedPuzzle): Promis
 }
 
 /**
- * Reject-sample a board into `entry`'s `(tier, size)` slot.
+ * The reject-sampling budget for a tier: the per-tier override where there is one,
+ * otherwise the shared budget. Only `Intro` currently overrides it — a depth-0 board is
+ * about a one-in-a-hundred draw, so the shared budget would miss Monday most weeks (#52).
+ */
+function attemptsFor(tier: DifficultyTier): number {
+	return pool.tierAttemptsByTier[tier] ?? pool.tierAttemptsPerDate;
+}
+
+/**
+ * Reject-sample a board into `entry`'s `(tier, size)` slot, or report a miss.
  *
  * `generate` samples boards at the target size and returns the first whose *computed*
  * tier matches — the generate-then-classify loop the spec locks. Exact-tier hits are not
- * guaranteed on any single draw, so it can exhaust its budget and report failure. When it
- * does we still fill the date, with a board at the right size whose tier is whatever it
- * scored, and say so loudly: a gap in the schedule breaks the daily outright, while an
- * off-slot tier is a curation blemish the operator can see and re-roll.
+ * guaranteed on any single draw, so it can exhaust its budget and miss.
+ *
+ * What a miss costs depends on how soon the date is, which is what `allowOffSlot` carries
+ * (#53). For a NEAR date a gap is the worse outcome — it would break the daily for
+ * everyone that morning — so the date is filled at the right size with whatever tier the
+ * board scored. For a FAR date the opposite holds: returning `null` leaves the date in
+ * `targetDates`, so next week's run tries it again and it self-heals to the right tier,
+ * whereas filling it off-slot would freeze a wrong-tier board in place permanently.
  */
 function sampleForSlot(
 	entry: SeedEntry,
-	salt: number
-): { puzzle: GeneratedPuzzle; onSlot: boolean } {
+	salt: number,
+	allowOffSlot: boolean
+): { puzzle: GeneratedPuzzle; onSlot: boolean } | null {
 	const seed = entry.seed + salt;
 	const onSlot = generate(entry.size, entry.tier, {
 		seed,
-		maxTierAttempts: pool.tierAttemptsPerDate
+		maxTierAttempts: attemptsFor(entry.tier)
 	});
 	if (onSlot) return { puzzle: onSlot, onSlot: true };
+	if (!allowOffSlot) return null;
 	return { puzzle: generatePuzzle(entry.size, { seed }), onSlot: false };
 }
 
@@ -226,11 +292,22 @@ interface Filled {
  * board's hash matches a puzzle that is ALREADY scheduled on another date. Reusing it
  * would violate the unique `puzzle_id`, and skipping the date would silently leave the
  * gap we are here to close, so we perturb the seed and sample a genuinely different board.
+ *
+ * Returns `null` when the date missed its tier and is far enough out to be left empty for
+ * a later run to retry (see {@link sampleForSlot}). That is a normal outcome, not a
+ * failure. The loop is not re-entered on a miss: the tier search has already spent its
+ * whole budget, and spending it again under a different salt is the next run's job.
  */
-async function fillDate(db: SupabaseClient, entry: SeedEntry): Promise<Filled> {
+async function fillDate(
+	db: SupabaseClient,
+	entry: SeedEntry,
+	allowOffSlot: boolean
+): Promise<Filled | null> {
 	for (let attempt = 0; attempt < pool.boardAttemptsPerDate; attempt++) {
 		// A prime stride, so a perturbed seed lands far from any other date's seed.
-		const { puzzle, onSlot } = sampleForSlot(entry, attempt * 7919);
+		const sampled = sampleForSlot(entry, attempt * 7919, allowOffSlot);
+		if (sampled === null) return null;
+		const { puzzle, onSlot } = sampled;
 		const existing = await existingPuzzleId(db, puzzle.secret.hash);
 
 		if (existing === null) {
@@ -286,6 +363,32 @@ async function main(): Promise<void> {
 	const db = createClient(url!, secretKey!, { auth: { persistSession: false } });
 	const today = dublinDate();
 
+	// Re-rolls clear their schedule rows BEFORE planning, so the dates read as unfilled and
+	// the ordinary fill path picks them up. Past dates are refused: they are archive, and a
+	// player's completed history must never be pointed at a different board.
+	const reroll = [...REROLL_DATES].filter((date) => date >= today).sort();
+	if (reroll.length > 0) {
+		// A dry run must not delete, so it also cannot show the re-rolled dates as targets:
+		// they still hold their schedule rows when the plan below is read. Say so plainly
+		// rather than printing a plan that quietly omits the very dates being asked about.
+		console.log(
+			DRY_RUN
+				? `DRY RUN — would re-roll ${reroll.length} date(s): ${reroll.join(', ')}\n` +
+						`(their schedule rows are left intact, so they do not appear as targets below)\n`
+				: `Re-rolling ${reroll.length} date(s): ${reroll.join(', ')}\n`
+		);
+		if (!DRY_RUN) await clearScheduleRows(db, reroll);
+	}
+	const refusedReroll = [...REROLL_DATES].filter((date) => date < today).sort();
+	if (refusedReroll.length > 0) {
+		annotate(
+			'warning',
+			`Refused to re-roll ${refusedReroll.length} past date(s): ${refusedReroll.join(', ')}. ` +
+				`A past daily is archive — re-pointing it would change the board under players who ` +
+				`have already solved it.`
+		);
+	}
+
 	const plan = await readPlan(db, today);
 	console.log(
 		`Pool generation — today ${today}, horizon ${plan.horizonDays} day(s), ` +
@@ -299,11 +402,27 @@ async function main(): Promise<void> {
 
 	let scheduled = 0;
 	let reused = 0;
-	let offSlot = 0;
+	let leftOpen = 0;
+	/** Kept as dates, not a count, so the warning can hand back a POOL_REROLL_DATES value. */
+	const offSlotDates: string[] = [];
 
 	for (const date of plan.targetDates) {
-		const entry: SeedEntry = { date, ...entryParams(date) };
-		const filled = await fillDate(db, entry);
+		const base = entryParams(date);
+		const entry: SeedEntry = {
+			date,
+			...base,
+			seed: REROLL_DATES.has(date) ? base.seed + REROLL_SALT : base.seed
+		};
+
+		const filled = await fillDate(db, entry, plan.acceptsOffSlotFill(date));
+		if (filled === null) {
+			leftOpen++;
+			console.log(
+				`  left open  ${date}  wanted ${entry.size}×${entry.size} · ${entry.tier}` +
+					`  (missed its tier; a later run will retry it)`
+			);
+			continue;
+		}
 		await scheduleDate(db, date, filled.puzzleId);
 
 		const { size, tier } = filled.puzzle.public;
@@ -318,18 +437,26 @@ async function main(): Promise<void> {
 
 		scheduled++;
 		if (filled.reused) reused++;
-		if (!filled.onSlot) offSlot++;
+		if (!filled.onSlot) offSlotDates.push(date);
 	}
 
 	console.log(
-		`\n${scheduled} date(s) newly scheduled, ${reused} board(s) reused, ${offSlot} off-slot.`
+		`\n${scheduled} date(s) newly scheduled, ${reused} board(s) reused, ` +
+			`${offSlotDates.length} off-slot, ${leftOpen} left open for a later run.`
 	);
-	if (offSlot > 0) {
+
+	// A left-open date is the DESIGNED outcome of a far-out miss, not a problem: it stays a
+	// target and a later run retries it. Deliberately not a warning — warning on the normal
+	// case is how a channel stops being read. The watermark is the alarm that matters, and
+	// it fires by itself if these ever stop healing.
+	if (offSlotDates.length > 0) {
 		annotate(
 			'warning',
-			`${offSlot} date(s) could not be reject-sampled onto their ramp tier within ` +
-				`${pool.tierAttemptsPerDate} attempts and were filled off-slot. The daily still ` +
-				`works; re-dispatch this workflow to re-roll, or widen pool.tierAttemptsPerDate.`
+			`${offSlotDates.length} date(s) inside the ${plan.watermarkDays}-day watermark window ` +
+				`missed their ramp tier and were filled OFF-SLOT rather than left as a gap. The ` +
+				`daily works, but those dates hold a wrong-tier board and a filled date is never ` +
+				`revisited, so re-dispatching this workflow will NOT change them. To re-roll, run ` +
+				`this workflow with reroll_dates = ${offSlotDates.join(',')}`
 		);
 	}
 

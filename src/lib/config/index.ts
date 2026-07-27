@@ -11,6 +11,8 @@
  * Every duration is milliseconds unless the name says otherwise.
  */
 
+import type { DifficultyTier } from '$lib/solver';
+
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
@@ -68,6 +70,20 @@ export const pool = {
 	 * and checks; this bounds that search before the date falls back to an off-tier board.
 	 */
 	tierAttemptsPerDate: 24,
+	/**
+	 * Per-tier override of that budget, for tiers whose boards are genuinely rare.
+	 *
+	 * `Intro` is the only entry and it is not a tuning whim: a 7×7 falls to pure forced
+	 * propagation (deduction depth 0) in roughly **one draw in a hundred**, so the shared
+	 * budget of 24 lands Monday's slot only about a quarter of the time. At 320 it lands
+	 * ~98%, and because the budget is a CAP rather than a fixed count — the search stops
+	 * at the first hit — the cost is only paid on the rare miss: ~0.6s per Monday, a few
+	 * seconds across a whole 90-day horizon.
+	 *
+	 * A number, not a rule: which tier a date targets is the ramp (`$lib/pool/ramp.ts`),
+	 * and that is code. This only says how hard to look before giving up (#52).
+	 */
+	tierAttemptsByTier: { Intro: 320 } as Partial<Record<DifficultyTier, number>>,
 	/**
 	 * How many distinct boards to try per date when the ones generated keep colliding with
 	 * the canonical hash of an already-scheduled puzzle. A puzzle is scheduled at most once

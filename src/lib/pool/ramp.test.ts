@@ -14,6 +14,18 @@ import { WEEKLY_RAMP, rampSlotForDate, weekdayIndex } from './ramp';
 
 const tierRank = (tier: DifficultyTier) => DIFFICULTY_TIERS.indexOf(tier);
 
+/**
+ * The tiers a board can actually score into, easiest first (#52).
+ *
+ * `Easy` is absent by measurement, not taste: the dominant score term is an integer
+ * deduction depth weighted 100 through `depth / (depth + 1.5)`, so depth 0 contributes 0
+ * and depth 1 contributes 40. At 7×7 the size term is exactly 0, so a board scores ~9 or
+ * ≥45 and nothing lands in Easy's 20–45 band. Sampling 600 boards across ten irregularity
+ * biases put 0 of them there.
+ */
+const REACHABLE_TIERS: readonly DifficultyTier[] = ['Intro', 'Medium', 'Hard', 'Expert'];
+const reachableRank = (tier: DifficultyTier) => REACHABLE_TIERS.indexOf(tier);
+
 describe('weekdayIndex', () => {
 	test('is 0 on Monday and 6 on Sunday', () => {
 		// 2026-07-27 is a Monday.
@@ -65,11 +77,14 @@ describe('WEEKLY_RAMP', () => {
 		}
 	});
 
-	test('is a gentle climb — it never jumps more than one tier in a day', () => {
+	test('is a gentle climb — it never jumps more than one reachable tier in a day', () => {
+		// Measured against the REACHABLE ladder, not the full taxonomy: no board can score
+		// into `Easy` at any supported size (#52), so Intro→Medium is one step, not two.
+		// Ranking against DIFFICULTY_TIERS here would fail the ramp for a gap that belongs
+		// to `scoreDifficulty`, not to the curation.
 		for (let i = 1; i < WEEKLY_RAMP.length; i++) {
-			expect(tierRank(WEEKLY_RAMP[i].tier) - tierRank(WEEKLY_RAMP[i - 1].tier)).toBeLessThanOrEqual(
-				1
-			);
+			const step = reachableRank(WEEKLY_RAMP[i].tier) - reachableRank(WEEKLY_RAMP[i - 1].tier);
+			expect(step).toBeLessThanOrEqual(1);
 		}
 	});
 
@@ -86,14 +101,19 @@ describe('WEEKLY_RAMP', () => {
 	});
 
 	test('aims only at tiers the generator can actually produce', () => {
-		// With the current `scoreDifficulty` cut points a 7×7 scores well above the Easy
-		// ceiling, so Intro and Easy are unreachable at every supported size. Aiming at
-		// them would make the early week miss its slot every day without producing an
-		// easier board — see the module doc. Recalibration moves this, not the ramp.
+		// Aiming at an unreachable tier would not make an easier daily — the date would
+		// miss its slot and be filled off-target, so the ramp would be fiction while the
+		// board stayed exactly as hard. Recalibrating `difficulty.ts` moves this, not the
+		// ramp. See the module doc for the measurement behind REACHABLE_TIERS.
 		for (const slot of WEEKLY_RAMP) {
-			expect(slot.tier).not.toBe('Intro');
-			expect(slot.tier).not.toBe('Easy');
+			expect(REACHABLE_TIERS).toContain(slot.tier);
 		}
+	});
+
+	test('opens the week on the gentlest reachable tier', () => {
+		// The point of #52: a depth-0 board — one that never forces a guess — is what a
+		// Monday should be, and it is reachable. Starting higher was the old behaviour.
+		expect(WEEKLY_RAMP[0].tier).toBe(REACHABLE_TIERS[0]);
 	});
 
 	test('is curated, not a rigid tier-per-weekday — at least one tier plateaus', () => {

@@ -27,7 +27,23 @@ name: Generate pool
 #   * PUBLIC_SUPABASE_URL — the project URL, e.g. https://<ref>.supabase.co (same page).
 #
 # The run is idempotent: it only inserts missing puzzles and schedule rows, never updates
-# or deletes, so re-running is safe and only fills gaps.
+# or deletes, so re-running is safe and only fills gaps. The one exception is an explicit
+# `reroll_dates` dispatch, which deletes those dates' schedule rows so they are refilled —
+# see "off-slot" below.
+#
+# WHAT A REJECT-SAMPLE MISS DOES (#53). A date whose board cannot be sampled onto its ramp
+# tier within budget is handled by how soon it is:
+#
+#   * INSIDE the watermark window — filled anyway, at the right size, with whatever tier it
+#     scored, and the run warns. A gap that close would break the daily for everyone.
+#   * OUTSIDE it — left empty. The date stays on the to-fill list, so the next weekly run
+#     retries it and it heals to the correct tier. Filling it would freeze a wrong-tier
+#     board in place, because a date that already holds a schedule row is never revisited.
+#
+# A gap can therefore only be created beyond the watermark, and runway stops counting at
+# the first gap — so a gap never fails the run that made it, and does fail once it has
+# survived long enough to drift close. An off-slot fill is the only case needing a human,
+# and `reroll_dates` is how it gets fixed.
 #
 # This supersedes the interim `seed-production.yml`.
 
@@ -45,6 +61,10 @@ on:
         default: false
       horizon_days:
         description: 'Days of runway to keep ahead (blank = the pool.horizonDays default)'
+        required: false
+        default: ''
+      reroll_dates:
+        description: 'Re-roll these dates, comma-separated YYYY-MM-DD (drops their schedule row and refills)'
         required: false
         default: ''
 
@@ -91,4 +111,5 @@ jobs:
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           POOL_DRY_RUN: ${{ inputs.dry_run }}
           POOL_HORIZON_DAYS: ${{ inputs.horizon_days }}
+          POOL_REROLL_DATES: ${{ inputs.reroll_dates }}
         run: npm run seed:remote

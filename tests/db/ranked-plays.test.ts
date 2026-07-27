@@ -155,6 +155,19 @@ describe('ranked_plays view', () => {
 		expect(ranked).not.toContain(unverified);
 	});
 
+	/**
+	 * The rule the view keys on is the `replay` EVENT, not the attempt number (#51).
+	 * They come apart in the guest merge: `merge_guest_plays` renumbers attempt_no as
+	 * max(account's) + rn, so a guest's clean solve folded onto an account that had
+	 * merely OPENED that daily is a first completed play carrying attempt_no = 2. It
+	 * ranks — and it bumps the streak, since complete_play gates on the same flag.
+	 */
+	test('a first completed play ranks even at attempt_no 2', async () => {
+		const user = await createUser(`ranked-merged-${crypto.randomUUID()}@example.com`);
+		const id = await insertCompleted({ userId: user, attemptNo: 2, replay: false });
+		expect(await rankedIdsOf(user)).toContain(id);
+	});
+
 	test('the view is select-own: a player sees only their own ranked rows', async () => {
 		const mine = await createUser(`ranked-mine-${crypto.randomUUID()}@example.com`);
 		const theirs = await createUser(`ranked-theirs-${crypto.randomUUID()}@example.com`);

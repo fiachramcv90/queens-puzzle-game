@@ -47,6 +47,33 @@ export interface SchedulePlan {
 	readonly meetsWatermark: boolean;
 	/** The `(tier, size)` slot a date is to be filled to — the ramp, carried for convenience. */
 	slotFor(date: string): RampSlot;
+	/**
+	 * Whether a date is near enough that an off-slot board beats leaving it empty — see
+	 * {@link withinWatermarkWindow}.
+	 */
+	acceptsOffSlotFill(date: string): boolean;
+}
+
+/**
+ * Whether `date` falls inside the watermark window — today up to but not including
+ * `today + watermarkDays`.
+ *
+ * This is the line the pipeline uses to decide what a reject-sample MISS costs (#53).
+ * Inside the window a gap is dangerous and an off-slot board is the lesser harm; outside
+ * it, leaving the date empty is strictly better, because the date stays in
+ * {@link SchedulePlan.targetDates} and every subsequent weekly run tries it again — so a
+ * miss self-heals to the correct tier instead of freezing a wrong-tier board in place.
+ * (A filled date is never revisited: `targetDates` skips anything already scheduled.)
+ *
+ * The two halves interlock deliberately. Because a gap can only ever be created OUTSIDE
+ * the window, and {@link runwayDays} stops counting at the first gap, a gap can never fail
+ * the watermark on the run that made it. It fails only if it survives long enough to drift
+ * inside the window — roughly eight more weekly attempts — at which point it genuinely is
+ * an emergency and the run goes red. Loudness tracks consequence, with no second alarm.
+ */
+export function withinWatermarkWindow(today: string, date: string, watermarkDays: number): boolean {
+	// Lexicographic comparison is date order for `YYYY-MM-DD`, so no parsing is owed.
+	return date < shiftDate(today, watermarkDays);
 }
 
 /** The horizon: `today` and the following `horizonDays - 1` days, oldest first. */
@@ -80,6 +107,7 @@ export function planSchedule(options: SchedulePlanOptions): SchedulePlan {
 		targetDates,
 		runwayDays: runway,
 		meetsWatermark: runway >= watermarkDays,
-		slotFor: rampSlotForDate
+		slotFor: rampSlotForDate,
+		acceptsOffSlotFill: (date) => withinWatermarkWindow(today, date, watermarkDays)
 	};
 }
