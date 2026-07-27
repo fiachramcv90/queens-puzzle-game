@@ -34,7 +34,7 @@ interface PostResult<T> {
 }
 
 async function post<T = Record<string, unknown>>(
-	action: 'start' | 'heartbeat' | 'submit',
+	action: 'start' | 'heartbeat' | 'submit' | 'reveal' | 'assist',
 	payload: unknown
 ): Promise<PostResult<T>> {
 	const res = await fetch(`${FUNCTIONS}/${action}`, {
@@ -58,6 +58,13 @@ function solvedBoard(): CellState[][] {
 	);
 	for (const { row, col } of solution) board[row][col] = 'queen';
 	return board;
+}
+
+/** An untouched board — every cell empty, which is where a reveal is most useful. */
+function emptyBoard(): CellState[][] {
+	return Array.from({ length: regionSize }, () =>
+		Array.from({ length: regionSize }, (): CellState => 'empty')
+	);
 }
 
 /** A clean move log that places the solution queens in row order (no conflicts). */
@@ -379,6 +386,71 @@ describe('bad tokens are rejected', () => {
 			moveLog: cleanLog()
 		});
 		expect(status).toBe(409);
+	});
+});
+
+/**
+ * The hint endpoints over HTTP, for the same reason the rest of this file exists: the
+ * RPCs behind them are covered in hints.test.ts, but a hint the PLAYER can take has to
+ * survive the whole path — gateway, function, RPC — and that path is where it broke.
+ *
+ * Both calls go out with NO authorization header, exactly as a guest's browser sends
+ * them through the proxy. That is the assertion: `reveal` and `assist` are keyed by the
+ * play token, they are guest-capable, and a config that lets the platform default
+ * verify_jwt back on turns every hint into a rejection at the gateway before the
+ * function is ever reached.
+ */
+describe('the hint endpoints answer a guest, keyed only by the play token', () => {
+	test('assist charges the play and hands back the server-set flag', async () => {
+		const token = await startFor(guest());
+		const { status, body } = await post<{ assisted: boolean; hintsUsed: number }>('assist', {
+			token
+		});
+		expect(status).toBe(200);
+		expect(body).toEqual({ assisted: true, hintsUsed: 1 });
+
+		const [row] = await sql<{ assisted: boolean; hints_used: number }[]>`
+      select assisted, hints_used from public.plays where token = ${token}
+    `;
+		expect(row).toEqual({ assisted: true, hints_used: 1 });
+	});
+
+	test('reveal returns one solution cell and charges for it', async () => {
+		const token = await startFor(guest());
+		const { status, body } = await post<{
+			cell: { row: number; col: number } | null;
+			assisted: boolean;
+			hintsUsed: number;
+		}>('reveal', { token, board: emptyBoard() });
+		expect(status).toBe(200);
+		expect(body.cell).not.toBeNull();
+		// The one cell, and only that cell — never the solution.
+		expect(solution).toContainEqual(body.cell);
+		expect(body.assisted).toBe(true);
+		expect(body.hintsUsed).toBe(1);
+	});
+
+	// Nothing left to reveal is not a hint, so it must not cost the player a ranking.
+	test('reveal on a fully placed board hands back nothing and charges nothing', async () => {
+		const token = await startFor(guest());
+		const { status, body } = await post<{ cell: null; assisted: boolean }>('reveal', {
+			token,
+			board: solvedBoard()
+		});
+		expect(status).toBe(200);
+		expect(body.cell).toBeNull();
+
+		const [row] = await sql<{ assisted: boolean; hints_used: number }[]>`
+      select assisted, hints_used from public.plays where token = ${token}
+    `;
+		expect(row).toEqual({ assisted: false, hints_used: 0 });
+	});
+
+	test('an unknown token → 404 from both', async () => {
+		expect((await post('assist', { token: crypto.randomUUID() })).status).toBe(404);
+		expect((await post('reveal', { token: crypto.randomUUID(), board: emptyBoard() })).status).toBe(
+			404
+		);
 	});
 });
 
