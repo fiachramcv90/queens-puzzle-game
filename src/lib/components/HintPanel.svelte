@@ -18,7 +18,7 @@
 	import type { Cell } from '$lib/solver';
 	import type { GameState } from '$lib/game/game-state.svelte';
 	import { findRuleViolations } from '$lib/game/hints';
-	import { recordAssist, revealCell } from '$lib/game/play-client';
+	import { PlayRequestError, recordAssist, revealCell } from '$lib/game/play-client';
 
 	interface Props {
 		game: GameState;
@@ -87,9 +87,16 @@
 					message = "Ruled-out cells are marked for you. They'll update as you place queens.";
 				}
 			}
-		} catch {
+		} catch (cause) {
 			failed = true;
-			message = "Couldn't reach the server, so no hint was given. Check your connection.";
+			// A refusal and an unreachable server are different problems, and telling a
+			// player to "check your connection" when the connection is fine sends them
+			// hunting for a fault they do not have. `PlayRequestError` means the request
+			// arrived and came back non-2xx, so say that instead.
+			message =
+				cause instanceof PlayRequestError
+					? 'The server turned that hint down, so none was given. Try again in a moment.'
+					: "Couldn't reach the server, so no hint was given. Check your connection.";
 		} finally {
 			busy = false;
 		}

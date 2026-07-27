@@ -54,6 +54,24 @@ Edge Functions deploy with `supabase functions deploy <name>` (the play lifecycl
 with `npm run build:edge-bundles` and commit them before deploying — CI fails if the checked-in
 bundle has drifted from the source.
 
+Deploy them **all six**, and check afterwards that all six are there:
+
+```sh
+supabase functions deploy start heartbeat submit reveal assist merge
+supabase functions list   # six ACTIVE rows, with the verify_jwt column as below
+```
+
+That check is not ceremony. A function that was never deployed does not fail loudly — the
+gateway 404s the call, the browser reports it as a failed request, and the feature is simply
+missing in production while every test passes. That is exactly how `reveal` and `assist`
+shipped absent, and every hint in the live app answered "couldn't reach the server".
+
+`verify_jwt` comes from `supabase/config.toml`, and the platform default is **on**. The five
+guest-capable functions (`start`, `heartbeat`, `submit`, `reveal`, `assist`) are declared off
+there because the proxy forwards the publishable key — `sb_publishable_…`, not a JWT — for them;
+a function left undeclared inherits the default and rejects every guest at the gateway. Only
+`merge` verifies, because it is the one that acts on behalf of a signed-in account.
+
 Neither is wired into CI yet. Doing that is deliberate: the schema does not exist yet, and an
 automatic `db push` against production is a decision to make once there is a schema worth
 protecting.

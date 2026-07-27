@@ -411,6 +411,18 @@ verify_jwt = false
 [functions.submit]
 verify_jwt = false
 
+# The two hint functions are guest-capable for the same reason, and keyed by the play
+# TOKEN rather than by an identity at all — the token already carries its owner, so a
+# session would tell them nothing they do not already know. Omitting them here is not
+# neutral: the platform default is verify_jwt = true, and the proxy forwards the
+# publishable key (`sb_publishable_…`, not a JWT) for these actions, so a defaulted
+# reveal/assist rejects every hint at the gateway.
+[functions.reveal]
+verify_jwt = false
+
+[functions.assist]
+verify_jwt = false
+
 # merge is the exception: it folds a guest's history onto a signed-in account, so it
 # is NOT guest-capable. verify_jwt is on, so the gateway rejects an anonymous call and
 # the function always runs for a real user, whose id it reads from the verified token.
