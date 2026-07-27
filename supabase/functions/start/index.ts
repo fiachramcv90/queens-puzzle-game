@@ -39,7 +39,17 @@ Deno.serve(async (req) => {
 	// Whose play this is. A session wins outright: the guest id in the body is not
 	// consulted at all for a signed-in caller, so a stale or borrowed one cannot
 	// redirect the play onto another identity.
-	const userId = await resolveUserId(req);
+	//
+	// Fail-open, for the same reason the rate limiter does: identity resolution must
+	// never be the thing that stops a play from beginning. A misconfigured env or an
+	// auth server having a bad minute costs the play its user id — recoverable, the
+	// merge folds it on at the next sign-in — where throwing would cost the player
+	// their game. Logged loudly, because the fallback quietly hands a signed-in
+	// player a guest play, which is precisely the failure this file exists to end.
+	const userId = await resolveUserId(req).catch((err) => {
+		console.error('resolveUserId failed; falling back to a guest play', err);
+		return null;
+	});
 	if (userId === null && !isUuid(body.guestId)) {
 		return json({ error: 'a guestId UUID is required' }, 400);
 	}
