@@ -15,39 +15,12 @@
 // it is NOT guest-capable, so an anonymous call is rejected at the gateway before it
 // arrives here.
 
-import { createClient } from 'npm:@supabase/supabase-js@2';
 import { adminClient } from '../_shared/admin.ts';
-import { isUuid } from '../_shared/owner.ts';
+import { isUuid, resolveUserId } from '../_shared/owner.ts';
 import { json, preflight, readJsonBody } from '../_shared/http.ts';
 
 interface MergeBody {
 	guestId?: unknown;
-}
-
-/**
- * Resolve the authenticated user id from the request's bearer token. verify_jwt has
- * already proven the token is valid; this reads the user it belongs to. Returns null
- * when no usable session token is present.
- */
-async function resolveUserId(req: Request): Promise<string | null> {
-	const authHeader = req.headers.get('Authorization') ?? '';
-	const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-	if (!token) return null;
-
-	const url = Deno.env.get('SUPABASE_URL');
-	const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-	if (!url || !anonKey) {
-		throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY must be set in the function env');
-	}
-
-	// A short-lived client scoped to the caller's token, used only to read the user.
-	const scoped = createClient(url, anonKey, {
-		global: { headers: { Authorization: `Bearer ${token}` } },
-		auth: { persistSession: false, autoRefreshToken: false }
-	});
-	const { data, error } = await scoped.auth.getUser();
-	if (error || !data.user) return null;
-	return data.user.id;
 }
 
 Deno.serve(async (req) => {
@@ -61,6 +34,9 @@ Deno.serve(async (req) => {
 		return json({ error: 'a guestId UUID is required' }, 400);
 	}
 
+	// The one caller that cannot fall back to a guest: without an account there is
+	// nothing to merge ONTO. verify_jwt has already rejected an anonymous call at the
+	// gateway, so reaching this is a token that parsed but resolves to no user.
 	const userId = await resolveUserId(req);
 	if (!userId) {
 		return json({ error: 'a valid session is required to merge' }, 401);
