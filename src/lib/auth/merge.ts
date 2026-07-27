@@ -41,6 +41,24 @@ export function guestNeedsMerge(blob: GuestBlob | null): boolean {
 }
 
 /**
+ * Re-arm the merge for this device, so the next authenticated load runs it again.
+ *
+ * The `merged` flag is set once and never cleared, which is only safe while a device
+ * stops producing guest rows the moment it has an account. That is now true — `start`
+ * keys a play to the session's user — with exactly one exception: playing signed OUT
+ * on a device that has merged before. Those rows are real server plays that belong to
+ * the account, and without this they would sit unmergeable forever, showing on the
+ * board as "Guest". So the flag is cleared at the one moment a new guest play is
+ * created, and nowhere else; the merge stays a once-per-pending-blob call rather than
+ * a request on every load.
+ */
+export function armGuestMerge(storage: StorageLike): void {
+	const blob = loadBlob(storage);
+	if (blob === null || blob.merged !== true) return;
+	saveBlob(storage, { ...blob, merged: false });
+}
+
+/**
  * Attempt the guest→account merge for the current session, at most once per pending
  * blob. Does nothing without a session (solo and guest play are never gated behind
  * one) and nothing once already merged. On success it records the `merged` flag; on

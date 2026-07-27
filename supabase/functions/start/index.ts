@@ -3,11 +3,18 @@
 // Writes started_at from the SERVER clock (inside start_play), assigns attempt_no
 // per identity and daily, and hands back an opaque play token. One open play per
 // identity per date is enforced in the database, so a reload returns the same
-// token and the same started_at rather than resetting the timer. Guest-capable:
-// no session required, keyed by the guest UUID in the body.
+// token and the same started_at rather than resetting the timer.
+//
+// Guest-capable but not guest-ONLY: the play is keyed to the signed-in user when the
+// request carries a session, and to the guest UUID in the body when it does not. That
+// choice is made here, at creation, because it is the only moment it is cheap. A play
+// created under the wrong identity is not merely mislabelled — it is missing from the
+// account's streak and shows on the leaderboard as "Guest" — and the merge that folds
+// guest history onto an account runs at SIGN-IN, so it cannot reach anything created
+// after it. See _shared/owner.ts for why the user id comes from the token alone.
 
 import { adminClient } from '../_shared/admin.ts';
-import { isUuid } from '../_shared/owner.ts';
+import { isUuid, resolveUserId } from '../_shared/owner.ts';
 import { enforceRateLimit } from '../_shared/rate-limit.ts';
 import { json, preflight, readJsonBody } from '../_shared/http.ts';
 
@@ -28,21 +35,42 @@ Deno.serve(async (req) => {
 	if (typeof body.puzzleDate !== 'string' || !DATE_RE.test(body.puzzleDate)) {
 		return json({ error: 'puzzleDate (YYYY-MM-DD) is required' }, 400);
 	}
-	if (!isUuid(body.guestId)) {
+
+	// Whose play this is. A session wins outright: the guest id in the body is not
+	// consulted at all for a signed-in caller, so a stale or borrowed one cannot
+	// redirect the play onto another identity.
+	//
+	// Fail-open, for the same reason the rate limiter does: identity resolution must
+	// never be the thing that stops a play from beginning. A misconfigured env or an
+	// auth server having a bad minute costs the play its user id — recoverable, the
+	// merge folds it on at the next sign-in — where throwing would cost the player
+	// their game. Logged loudly, because the fallback quietly hands a signed-in
+	// player a guest play, which is precisely the failure this file exists to end.
+	const userId = await resolveUserId(req).catch((err) => {
+		console.error('resolveUserId failed; falling back to a guest play', err);
+		return null;
+	});
+	if (userId === null && !isUuid(body.guestId)) {
 		return json({ error: 'a guestId UUID is required' }, 400);
 	}
+
+	// start_play enforces `exactly one of user_id or guest_id`, so these two are a
+	// pair: whichever identity did not resolve is passed as null.
+	const guestId = userId === null ? (body.guestId as string) : null;
 
 	const admin = adminClient();
 
 	// Per-identity cap, enforced here so a direct call cannot skip it and a cold
-	// start cannot forget it. Numbers come from config via the shared helper.
-	const limited = await enforceRateLimit(admin, 'start', body.guestId);
+	// start cannot forget it. Keyed on whichever identity actually owns the play, so
+	// signing in neither resets a guest's budget nor inherits it. Numbers come from
+	// config via the shared helper.
+	const limited = await enforceRateLimit(admin, 'start', userId ?? (guestId as string));
 	if (limited) return limited;
 
 	const { data, error } = await admin.rpc('start_play', {
 		p_puzzle_date: body.puzzleDate,
-		p_user_id: null,
-		p_guest_id: body.guestId
+		p_user_id: userId,
+		p_guest_id: guestId
 	});
 
 	if (error) {

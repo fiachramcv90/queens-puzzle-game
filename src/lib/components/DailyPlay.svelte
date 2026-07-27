@@ -6,6 +6,8 @@
 	import { getOrCreateGuestId, loadBlob, saveBlob, writePrefs } from '$lib/game/persistence';
 	import { resolveBoardPrefs } from '$lib/game/palette';
 	import { syncPrefsToProfile } from '$lib/auth/profile';
+	import { currentSession } from '$lib/auth/session';
+	import { armGuestMerge } from '$lib/auth/merge';
 	import { sendHeartbeat, startPlay, submitPlay } from '$lib/game/play-client';
 	import { appendRecord, recordFromResult } from '$lib/history/records';
 	import { formatTime } from '$lib/game/format';
@@ -73,6 +75,38 @@
 		if (auth?.signedIn) void syncPrefsToProfile(patch).catch(() => {});
 	}
 
+	/**
+	 * Anchor the play on the server, under the right identity.
+	 *
+	 * The session is read here, and AWAITED before `start` is called, rather than taken
+	 * from the shared AuthState — because AuthState resolves its session asynchronously
+	 * from the layout's own onMount, and this component's onMount can win that race. A
+	 * `start` that fires first would create a GUEST play for a signed-in player, and
+	 * nothing re-keys a play afterwards: it would stay off their streak and show on the
+	 * leaderboard as "Guest" for good. `currentSession()` reads the persisted session
+	 * directly, so the answer is the same whichever component mounted first.
+	 *
+	 * A failure leaves the board fully playable — it just is not anchored, which is the
+	 * same state an offline start has always produced.
+	 */
+	async function anchorPlay(): Promise<void> {
+		const session = await currentSession().catch(() => null);
+
+		// No session means this really is a guest play, so re-arm the silent merge: it
+		// has to fold this onto the account at the next sign-in even if this device
+		// merged once already.
+		if (!session && storage) armGuestMerge(storage);
+
+		try {
+			const started = await startPlay(daily.date, guestId, session?.access_token ?? null);
+			if (!game) return;
+			game.token = started.token;
+			game.startedAt = Date.parse(started.startedAt);
+		} catch {
+			// Offline, rate-limited or an unavailable daily: play on, unanchored.
+		}
+	}
+
 	onMount(() => {
 		storage = window.localStorage;
 		guestId = getOrCreateGuestId(storage);
@@ -104,15 +138,7 @@
 
 		// Anchor the play on the server unless it is already completed. `start` is
 		// idempotent per identity and date and accepts any visible (today or past) daily.
-		if (!game.result) {
-			startPlay(daily.date, guestId)
-				.then((started) => {
-					if (!game) return;
-					game.token = started.token;
-					game.startedAt = Date.parse(started.startedAt);
-				})
-				.catch(() => {});
-		}
+		if (!game.result) void anchorPlay();
 
 		const timer = setInterval(() => {
 			if (game && game.solvedElapsedMs === undefined) game.nowMs = Date.now();

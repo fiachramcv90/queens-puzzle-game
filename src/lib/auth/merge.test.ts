@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { guestNeedsMerge, syncGuestMerge, type MergeSession } from './merge';
+import { armGuestMerge, guestNeedsMerge, syncGuestMerge, type MergeSession } from './merge';
 import { GUEST_BLOB_KEY, loadBlob, saveBlob, type StorageLike } from '$lib/game/persistence';
 import type { GuestBlob } from '$lib/game/types';
 
@@ -102,6 +102,42 @@ describe('syncGuestMerge', () => {
 		const storage = memoryStorage();
 		expect(await syncGuestMerge(storage, SESSION, merge)).toBe('skipped');
 		expect(merge).not.toHaveBeenCalled();
+		expect(storage.getItem(GUEST_BLOB_KEY)).toBeNull();
+	});
+});
+
+describe('armGuestMerge', () => {
+	test('a guest play made after a merge is merged again on the next sign-in', async () => {
+		const merge = vi.fn().mockResolvedValue(undefined);
+		const storage = withBlob({ guestId: GUEST, prefs: {} });
+
+		// Signed in once: the history so far folds onto the account.
+		await syncGuestMerge(storage, SESSION, merge);
+		expect(loadBlob(storage)?.merged).toBe(true);
+
+		// Then played signed OUT, which mints a fresh guest play on the server.
+		armGuestMerge(storage);
+		expect(guestNeedsMerge(loadBlob(storage))).toBe(true);
+
+		merge.mockClear();
+		expect(await syncGuestMerge(storage, SESSION, merge)).toBe('merged');
+		expect(merge).toHaveBeenCalledWith(GUEST, SESSION.accessToken);
+	});
+
+	test('it leaves an unmerged blob — and the rest of the blob — alone', () => {
+		const storage = withBlob({ guestId: GUEST, prefs: { autoMarkX: true } });
+
+		armGuestMerge(storage);
+
+		const after = loadBlob(storage)!;
+		expect(after.merged).toBeUndefined();
+		expect(after.prefs).toEqual({ autoMarkX: true });
+		expect(after.guestId).toBe(GUEST);
+	});
+
+	test('with no stored blob it writes nothing', () => {
+		const storage = memoryStorage();
+		armGuestMerge(storage);
 		expect(storage.getItem(GUEST_BLOB_KEY)).toBeNull();
 	});
 });

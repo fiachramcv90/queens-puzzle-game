@@ -25,11 +25,15 @@ export type FetchLike = typeof fetch;
 async function postJson<T>(
 	fetchImpl: FetchLike,
 	action: 'start' | 'heartbeat' | 'submit' | 'reveal' | 'assist',
-	payload: unknown
+	payload: unknown,
+	accessToken: string | null = null
 ): Promise<T> {
 	const res = await fetchImpl(`/api/play/${action}`, {
 		method: 'POST',
-		headers: { 'content-type': 'application/json' },
+		headers: {
+			'content-type': 'application/json',
+			...(accessToken ? { authorization: `Bearer ${accessToken}` } : {})
+		},
 		body: JSON.stringify(payload)
 	});
 	if (!res.ok) {
@@ -39,13 +43,23 @@ async function postJson<T>(
 	return (await res.json()) as T;
 }
 
-/** Begin (or resume) today's play for a guest. Idempotent server-side per date. */
+/**
+ * Begin (or resume) the play for a date. Idempotent server-side per identity and date.
+ *
+ * `accessToken` is what decides WHOSE play this is: with one, the server keys the play
+ * to the signed-in user; without one, to `guestId`. Passing null for a player who is
+ * in fact signed in does not merely mislabel the row — the play never reaches their
+ * streak or the leaderboard under their name, and no later step re-keys it. Callers
+ * must therefore resolve the session BEFORE calling, never fire this off and hope the
+ * session arrives first.
+ */
 export function startPlay(
 	puzzleDate: string,
 	guestId: string,
+	accessToken: string | null = null,
 	fetchImpl: FetchLike = fetch
 ): Promise<StartResult> {
-	return postJson<StartResult>(fetchImpl, 'start', { puzzleDate, guestId });
+	return postJson<StartResult>(fetchImpl, 'start', { puzzleDate, guestId }, accessToken);
 }
 
 /** Report liveness. Best-effort: an unknown or completed token is not an error. */

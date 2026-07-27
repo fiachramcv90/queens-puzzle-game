@@ -22,6 +22,20 @@ import { publicSupabaseEnv } from '$lib/supabase/env';
 /** The Edge Functions this proxy is willing to forward to. */
 const ACTIONS = new Set(['start', 'heartbeat', 'submit', 'merge', 'reveal', 'assist']);
 
+/**
+ * The actions whose OWNER is the caller, so their real session token has to reach the
+ * Edge Function rather than being replaced by the routing key.
+ *
+ * `merge` folds a guest's history onto the account the token names. `start` decides
+ * whether the play it creates belongs to a user or to a guest, and that decision is
+ * unrepeatable — nothing downstream re-keys a play, so a `start` that arrived without
+ * the session produces a guest play for a signed-in player, permanently.
+ *
+ * The rest are keyed by the play TOKEN, which already carries its owner, so they have
+ * no use for a session and are not given one.
+ */
+const SESSION_ACTIONS = new Set(['start', 'merge']);
+
 export const POST: RequestHandler = async ({ params, request, fetch }) => {
 	if (!ACTIONS.has(params.action)) {
 		throw error(404, 'unknown play action');
@@ -30,14 +44,13 @@ export const POST: RequestHandler = async ({ params, request, fetch }) => {
 	const { url, publishableKey } = publicSupabaseEnv();
 	const body = await request.text();
 
-	// `merge` runs for a signed-in user only (verify_jwt), so its true session token
-	// must reach the Edge Function — that is the identity the merge is keyed to. The
-	// guest-capable play actions carry no session, so they route on the publishable
-	// key alone. apikey stays the publishable key throughout: it is only how the
-	// Supabase gateway routes the call.
+	// Forward the caller's own token for the session-owned actions, and the publishable
+	// key for the rest. A guest sends no authorization header at all, so `start` falls
+	// back to the key and stays guest-capable. apikey stays the publishable key
+	// throughout: it is only how the Supabase gateway routes the call.
 	const clientAuth = request.headers.get('authorization');
 	const authorization =
-		params.action === 'merge' && clientAuth ? clientAuth : `Bearer ${publishableKey}`;
+		SESSION_ACTIONS.has(params.action) && clientAuth ? clientAuth : `Bearer ${publishableKey}`;
 
 	const upstream = await fetch(`${url}/functions/v1/${params.action}`, {
 		method: 'POST',
