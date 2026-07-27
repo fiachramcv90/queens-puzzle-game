@@ -56,7 +56,12 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { generate, generatePuzzle, type GeneratedPuzzle } from '../src/lib/solver/index';
+import {
+	generate,
+	generatePuzzle,
+	type DifficultyTier,
+	type GeneratedPuzzle
+} from '../src/lib/solver/index';
 import { entryParams, shiftDate, type SeedEntry } from '../src/lib/pool/seed-window';
 import { planSchedule, type SchedulePlan } from '../src/lib/pool/schedule-plan';
 import { pool } from '../src/lib/config/index';
@@ -188,6 +193,15 @@ async function insertPuzzle(db: SupabaseClient, puzzle: GeneratedPuzzle): Promis
 }
 
 /**
+ * The reject-sampling budget for a tier: the per-tier override where there is one,
+ * otherwise the shared budget. Only `Intro` currently overrides it — a depth-0 board is
+ * about a one-in-a-hundred draw, so the shared budget would miss Monday most weeks (#52).
+ */
+function attemptsFor(tier: DifficultyTier): number {
+	return pool.tierAttemptsByTier[tier] ?? pool.tierAttemptsPerDate;
+}
+
+/**
  * Reject-sample a board into `entry`'s `(tier, size)` slot.
  *
  * `generate` samples boards at the target size and returns the first whose *computed*
@@ -204,7 +218,7 @@ function sampleForSlot(
 	const seed = entry.seed + salt;
 	const onSlot = generate(entry.size, entry.tier, {
 		seed,
-		maxTierAttempts: pool.tierAttemptsPerDate
+		maxTierAttempts: attemptsFor(entry.tier)
 	});
 	if (onSlot) return { puzzle: onSlot, onSlot: true };
 	return { puzzle: generatePuzzle(entry.size, { seed }), onSlot: false };
@@ -327,9 +341,9 @@ async function main(): Promise<void> {
 	if (offSlot > 0) {
 		annotate(
 			'warning',
-			`${offSlot} date(s) could not be reject-sampled onto their ramp tier within ` +
-				`${pool.tierAttemptsPerDate} attempts and were filled off-slot. The daily still ` +
-				`works; re-dispatch this workflow to re-roll, or widen pool.tierAttemptsPerDate.`
+			`${offSlot} date(s) could not be reject-sampled onto their ramp tier within their ` +
+				`attempt budget and were filled off-slot. The daily still works; re-dispatch this ` +
+				`workflow to re-roll, or widen pool.tierAttemptsPerDate (or the per-tier override).`
 		);
 	}
 

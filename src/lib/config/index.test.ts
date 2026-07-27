@@ -30,6 +30,14 @@ describe('pool', () => {
 		expect(pool.tierAttemptsPerDate).toBeGreaterThan(1);
 		expect(pool.boardAttemptsPerDate).toBeGreaterThan(1);
 	});
+
+	it('looks harder for a rare tier than for the common ones', () => {
+		// The override exists because a depth-0 board is roughly a one-in-a-hundred draw
+		// (#52); a budget at or below the shared one would defeat the point of having it.
+		for (const attempts of Object.values(pool.tierAttemptsByTier)) {
+			expect(attempts).toBeGreaterThan(pool.tierAttemptsPerDate);
+		}
+	});
 });
 
 describe('heartbeat', () => {
