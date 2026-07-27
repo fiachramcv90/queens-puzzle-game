@@ -18,6 +18,7 @@
 -->
 <script lang="ts">
 	import { signInWithGoogle, signInWithMagicLink, signOut } from '$lib/auth/session';
+	import { confirmDisplayName, isConfirmableDisplayName } from '$lib/auth/profile';
 	import type { AuthState } from '$lib/auth/auth-state.svelte';
 
 	let { auth }: { auth: AuthState } = $props();
@@ -27,6 +28,51 @@
 	let linkSent = $state(false);
 	let busy = $state(false);
 	let errorMessage = $state<string | null>(null);
+
+	/**
+	 * Renaming from the account menu — the only way to change a display name after the
+	 * one-time confirm has been answered (#44).
+	 *
+	 * `NameConfirm` retires itself for good by setting `name_confirmed`, so without this
+	 * a player who accepted their seeded name had no way back. That matters most for a
+	 * magic-link signup, whose name is seeded from the email local-part: one keystroke
+	 * would otherwise publish `firstname.lastname` to the global board permanently.
+	 *
+	 * The draft is separate from the profile so a failed write leaves the typing intact,
+	 * the same way the confirm prompt does it.
+	 */
+	let editingName = $state(false);
+	let nameDraft = $state('');
+	let nameField = $state<HTMLInputElement | null>(null);
+
+	function startRename(): void {
+		nameDraft = auth.profile?.displayName ?? '';
+		errorMessage = null;
+		editingName = true;
+	}
+
+	function cancelRename(): void {
+		editingName = false;
+		errorMessage = null;
+	}
+
+	async function saveName(): Promise<void> {
+		if (!isConfirmableDisplayName(nameDraft)) return;
+		await run(async () => {
+			// The same call the one-time prompt makes: it sets `name_confirmed` too, which is
+			// already true here and stays true — a rename is a player choosing their name just
+			// as much as the first confirm was.
+			await confirmDisplayName(nameDraft);
+			await auth.refreshProfile();
+			editingName = false;
+		});
+	}
+
+	// Focus the field when the rename opens, so the menu behaves like the confirm prompt
+	// for a keyboard player rather than leaving them to find it.
+	$effect(() => {
+		if (editingName) nameField?.focus();
+	});
 
 	let trigger = $state<HTMLButtonElement | null>(null);
 	let panel = $state<HTMLElement | null>(null);
@@ -53,6 +99,7 @@
 
 	function close(): void {
 		open = false;
+		editingName = false;
 		errorMessage = null;
 		trigger?.focus();
 	}
@@ -89,9 +136,13 @@
 	});
 </script>
 
+<!-- Escape backs out one step at a time: it abandons a rename in progress before it
+     closes the whole menu, so a mistyped name does not also cost the player the panel. -->
 <svelte:window
 	onkeydown={(event) => {
-		if (open && event.key === 'Escape') close();
+		if (!open || event.key !== 'Escape') return;
+		if (editingName) cancelRename();
+		else close();
 	}}
 />
 
@@ -113,16 +164,56 @@
 
 		{#if open}
 			<div class="panel" bind:this={panel}>
-				<p class="panel-name">{auth.profile?.displayName ?? 'Signed in'}</p>
-				<p class="panel-note">Your history and streak sync across every device.</p>
-				<button
-					class="btn btn-sm"
-					type="button"
-					onclick={() => run(signOut).then(close)}
-					disabled={busy}
-				>
-					{busy ? 'Signing out…' : 'Sign out'}
-				</button>
+				{#if editingName}
+					<form
+						onsubmit={(event) => {
+							event.preventDefault();
+							void saveName();
+						}}
+					>
+						<label class="rename-label" for="account-name-input">Display name</label>
+						<input
+							id="account-name-input"
+							class="field"
+							type="text"
+							bind:this={nameField}
+							bind:value={nameDraft}
+							autocomplete="nickname"
+							required
+						/>
+						<p class="panel-note">This is what friends and the leaderboard show.</p>
+						<div class="rename-actions">
+							<button
+								class="btn btn-sm btn-primary"
+								type="submit"
+								disabled={busy || !isConfirmableDisplayName(nameDraft)}
+							>
+								{busy ? 'Saving…' : 'Save'}
+							</button>
+							<button class="btn btn-sm" type="button" onclick={cancelRename} disabled={busy}>
+								Cancel
+							</button>
+						</div>
+					</form>
+				{:else}
+					<p class="panel-name">{auth.profile?.displayName ?? 'Signed in'}</p>
+					<p class="panel-note">Your history and streak sync across every device.</p>
+					<div class="rename-actions">
+						<button class="btn btn-sm" type="button" onclick={startRename} disabled={busy}>
+							Change name
+						</button>
+						<button
+							class="btn btn-sm"
+							type="button"
+							onclick={() => run(signOut).then(close)}
+							disabled={busy}
+						>
+							{busy ? 'Signing out…' : 'Sign out'}
+						</button>
+					</div>
+				{/if}
+
+				{#if errorMessage}<p class="form-error">{errorMessage}</p>{/if}
 			</div>
 		{/if}
 	{:else}
@@ -280,6 +371,27 @@
 		margin: 0 0 var(--space-3);
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+	}
+
+	.rename-label {
+		display: block;
+		margin-bottom: 0.25rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		opacity: 0.7;
+	}
+
+	.rename-label + .field {
+		width: 100%;
+		margin-bottom: var(--space-2);
+	}
+
+	.rename-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
 	}
 
 	.google {

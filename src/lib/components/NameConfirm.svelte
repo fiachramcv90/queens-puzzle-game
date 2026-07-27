@@ -15,10 +15,26 @@
   is gone on the next visit and after a reload; the profile is re-read afterwards so
   the retirement is reflected without one.
 
-  Deliberately not a modal. It is an inline panel in the page flow: focus moves to the
-  input when it appears, Escape (or "Not now") dismisses it for this visit, and Tab
-  walks straight out into the page — nothing is trapped, and a player who ignores it
-  can still read the board underneath.
+  DELIBERATELY NOT A MODAL — settled in #44, which originally asked for one.
+
+  It is an inline panel in the page flow, rendered directly under the page heading:
+  focus moves to the input when it appears and returns where it came from on every
+  close, Escape (or "Not now") dismisses it for this visit, and Tab walks straight out
+  into the page. Nothing is trapped, nothing is inert, and a player who ignores it can
+  read the board underneath.
+
+  A modal asserts "you cannot proceed until you answer this", and this question has not
+  earned that: the player came to read the leaderboard, and their display name has no
+  bearing on it. The panel already does the parts of modal behaviour that carry real
+  accessibility value — focus in, focus restored, Escape — without the part that only
+  obstructs. `AuthPanel` next to it made the same call for the same reason, so the two
+  auth surfaces behave alike rather than one of them trapping.
+
+  This also depends on the decision being REVERSIBLE. Confirming sets `name_confirmed`
+  and retires this prompt for good, so if it were the only way to set a name, one
+  keystroke would be permanent — worst for a magic-link signup, whose name is seeded
+  from the email local-part. The account menu therefore carries a rename (#44), which is
+  what makes a non-blocking prompt the right shape rather than a risky one.
 -->
 <script lang="ts">
 	import type { AuthState } from '$lib/auth/auth-state.svelte';
