@@ -13,6 +13,7 @@
 	import { formatTime } from '$lib/game/format';
 	import { heartbeat } from '$lib/config';
 	import Board from '$lib/components/Board.svelte';
+	import BoardActions from '$lib/components/BoardActions.svelte';
 	import BoardSettings from '$lib/components/BoardSettings.svelte';
 	import HintPanel from '$lib/components/HintPanel.svelte';
 	import StreakBadge from '$lib/components/StreakBadge.svelte';
@@ -275,6 +276,14 @@
 			onSweep={(cells: readonly Cell[]) => game?.sweep(cells)}
 		/>
 	</div>
+
+	<!-- Below the board, not up with the hints: this acts on what the player has just
+	     been doing, and it must not read as one of the controls that costs the ranking.
+	     Hidden once solved for the same reason the hints are — the board is locked, and
+	     a control that alters a finished board can only damage it. -->
+	{#if !game.solved}
+		<BoardActions {game} />
+	{/if}
 
 	{#if game.result}
 		<div class="result" class:won={true}>
