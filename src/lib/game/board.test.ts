@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Board } from '$lib/solver';
 import {
+	clearMarks,
+	countMarks,
 	createEmptyBoard,
 	nextFocus,
 	nextTapState,
@@ -105,6 +107,78 @@ describe('sweepX — the touch drag that bulk-marks a row', () => {
 	it('is a no-op on an empty sweep', () => {
 		const board: Board = createEmptyBoard(2);
 		expect(sweepX(board, [])).toEqual(board);
+	});
+});
+
+describe('clearMarks — the one control that empties the notation', () => {
+	it('clears the player’s own X back to empty', () => {
+		let board = createEmptyBoard(2);
+		board = setCell(board, 0, 0, 'X');
+		board = setCell(board, 1, 1, 'X');
+		expect(clearMarks(board)).toEqual([
+			['empty', 'empty'],
+			['empty', 'empty']
+		]);
+	});
+
+	// The assist's marks go too. Under a running assist they are recomputed on the
+	// very next move, so this is not the player losing them — it is the board being
+	// handed back to the assist in a state it can settle from.
+	it('clears a machine-placed auto-X as well', () => {
+		let board = createEmptyBoard(2);
+		board = setCell(board, 0, 1, 'auto-X');
+		expect(clearMarks(board)[0][1]).toBe('empty');
+	});
+
+	// The whole point of the control: notation goes, placements stay. A clear that
+	// took a queen with it would lose real work rather than bookkeeping.
+	it('never touches a queen', () => {
+		let board = createEmptyBoard(3);
+		board = setCell(board, 0, 0, 'queen');
+		board = setCell(board, 0, 1, 'X');
+		board = setCell(board, 2, 2, 'queen');
+		const cleared = clearMarks(board);
+		expect(cleared[0][0]).toBe('queen');
+		expect(cleared[0][1]).toBe('empty');
+		expect(cleared[2][2]).toBe('queen');
+	});
+
+	it('does not mutate the input board', () => {
+		let board = createEmptyBoard(2);
+		board = setCell(board, 0, 0, 'X');
+		clearMarks(board);
+		expect(board[0][0]).toBe('X');
+	});
+
+	it('is a no-op on a board with nothing to clear', () => {
+		let board = createEmptyBoard(2);
+		board = setCell(board, 1, 0, 'queen');
+		expect(clearMarks(board)).toEqual(board);
+	});
+});
+
+describe('countMarks — how many of the player’s own marks are down', () => {
+	it('counts every X on the board', () => {
+		let board = createEmptyBoard(3);
+		board = setCell(board, 0, 0, 'X');
+		board = setCell(board, 1, 1, 'X');
+		board = setCell(board, 2, 2, 'X');
+		expect(countMarks(board)).toBe(3);
+	});
+
+	// Deliberately excludes auto-X: those come straight back under a running assist,
+	// so counting them would report marks that clearing cannot remove — and leave the
+	// control enabled on a board where pressing it appears to do nothing.
+	it('ignores auto-X, queens and empty cells', () => {
+		let board = createEmptyBoard(3);
+		board = setCell(board, 0, 0, 'auto-X');
+		board = setCell(board, 1, 1, 'queen');
+		board = setCell(board, 2, 2, 'X');
+		expect(countMarks(board)).toBe(1);
+	});
+
+	it('is 0 on an empty board', () => {
+		expect(countMarks(createEmptyBoard(4))).toBe(0);
 	});
 });
 

@@ -110,6 +110,34 @@ export function toggleXCell(board: Board, row: number, col: number): Board {
 }
 
 /**
+ * The board with every mark cleared back to empty — the player's own X's and the
+ * assist's `auto-X` alike. Queens are never touched: this clears NOTATION, not
+ * placements, which is the whole reason one control can do it in a single action.
+ *
+ * The assist's marks go too, and that is not the player losing them: under a running
+ * assist `applyMove` recomputes them on the very next move, so what this really does
+ * is hand the board back to the assist in a state it can settle from. The visible
+ * effect is a player's X turning light rather than vanishing.
+ */
+export function clearMarks(board: Board): Board {
+	return board.map((cells) =>
+		cells.map((state) => (state === 'X' || state === 'auto-X' ? 'empty' : state))
+	);
+}
+
+/**
+ * How many of the player's OWN marks are on the board — what the clear control
+ * enables on, and the number it reports afterwards.
+ *
+ * `auto-X` is deliberately not counted. Those cells return the instant the next move
+ * lands, so counting them would report marks that clearing cannot remove, and would
+ * leave the control enabled on a board where pressing it appears to do nothing.
+ */
+export function countMarks(board: Board): number {
+	return board.reduce((n, cells) => n + cells.filter((state) => state === 'X').length, 0);
+}
+
+/**
  * The touch drag-sweep: mark a run of cells with X in one gesture. Only cells
  * that were `empty` or a light `auto-X` are swept — a player's own X or a queen
  * is left alone, so a drag never wipes a deliberate placement.

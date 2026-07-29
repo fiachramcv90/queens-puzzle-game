@@ -15,7 +15,7 @@
 
 import { checkRules } from '$lib/solver';
 import type { Board, Cell, DifficultyTier, Move, MoveLog, RegionMap } from '$lib/solver';
-import { createEmptyBoard, sweepX, tapCell, toggleXCell } from './board';
+import { clearMarks, countMarks, createEmptyBoard, sweepX, tapCell, toggleXCell } from './board';
 import { applyAutoMarks, clearAutoMarks } from './hints';
 import { deriveConflicts } from './conflicts';
 import type { Daily, PersistedPlay, PlayResult } from './types';
@@ -72,6 +72,8 @@ export class GameState {
 	readonly queenCount: number = $derived(
 		this.board.reduce((n, row) => n + row.filter((c) => c === 'queen').length, 0)
 	);
+	/** The player's own marks currently down — what the clear control acts on. */
+	readonly markCount: number = $derived(countMarks(this.board));
 	/** Display-only elapsed time: frozen once solved, live otherwise. */
 	readonly elapsedMs: number = $derived(
 		this.solvedElapsedMs ?? Math.max(0, this.nowMs - this.startedAt)
@@ -109,6 +111,19 @@ export class GameState {
 	/** Drag-sweep: mark a run of cells with X in one gesture. */
 	sweep(cells: readonly Cell[]): void {
 		this.applyMove(sweepX(this.board, cells));
+	}
+
+	/**
+	 * Clear every mark in one action, leaving the queens exactly where they are.
+	 *
+	 * NOT a hint, and so deliberately not routed anywhere near one: clearing REMOVES
+	 * information and can never bring a player closer to the solution, so it costs
+	 * nothing — no server call, no `assisted` charge, no ranking. It goes through the
+	 * normal move path like every other interaction, so each cleared cell lands in the
+	 * move log and the server's replay reproduces the board it produced.
+	 */
+	clearMarks(): void {
+		this.applyMove(clearMarks(this.board));
 	}
 
 	/**
